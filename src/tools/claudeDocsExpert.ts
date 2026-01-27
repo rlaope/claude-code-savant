@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getPersona, PersonaType } from "../personas/index.js";
 import { formatOutput } from "../utils/outputFormatter.js";
+import { analyzePromptForPersona } from "../utils/promptAnalyzer.js";
 
 /**
  * Input schema for the claude_docs_expert tool
@@ -14,8 +15,9 @@ const inputSchema = z.object({
   code: z.string().min(1).describe("The code to analyze"),
   persona: z
     .enum(["shakespeare", "einstein"])
+    .optional()
     .describe(
-      "The persona to use for analysis: 'shakespeare' for narrative/flowcharts, 'einstein' for first principles/complexity"
+      "The persona to use for analysis. If omitted, automatically selected based on instruction: 'shakespeare' for narrative/flowcharts, 'einstein' for performance/complexity"
     ),
 });
 
@@ -33,8 +35,16 @@ export function registerClaudeDocsExpertTool(server: McpServer): void {
           typeof inputSchema
         >;
 
+        // Auto-select persona if not provided
+        const selectedPersonaType: PersonaType =
+          personaType ?? analyzePromptForPersona(instruction);
+
+        console.error(
+          `[claude_docs_expert] Using persona: ${selectedPersonaType}${!personaType ? " (auto-selected)" : ""}`
+        );
+
         // Get the appropriate persona
-        const persona = getPersona(personaType as PersonaType);
+        const persona = getPersona(selectedPersonaType);
 
         // Analyze the code
         const result = persona.analyze(instruction, code);
