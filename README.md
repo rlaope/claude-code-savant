@@ -49,24 +49,25 @@ A Claude Code plugin that provides expert explanations through distinctive perso
 
 ## Installation
 
-### Claude Code Plugin (Recommended)
+### Via Marketplace (Recommended)
 
 ```bash
-# Clone or download this repository
-git clone https://github.com/your-username/claude-code-savant.git
+# Step 1: Add the marketplace
+/plugin marketplace add rlaope/claude-code-savant
+
+# Step 2: Install the plugin
+/plugin install claude-code-savant
+```
+
+### Manual Installation (Alternative)
+
+```bash
+# Clone the repository
+git clone https://github.com/rlaope/claude-code-savant.git
 cd claude-code-savant
 
 # Run Claude Code with the plugin
 claude --plugin-dir .
-```
-
-### MCP Server (Alternative)
-
-```bash
-npm install
-npm run build
-
-# Add to Claude Desktop config
 ```
 
 ## Usage
@@ -88,9 +89,6 @@ claude-code-savant:shakespeare  # Narrative with diagrams
 ### Examples
 
 ```bash
-# Start Claude with plugin
-claude --plugin-dir /path/to/claude-code-savant
-
 # Ask a question (Einstein)
 /savant-question What is MCP?
 
@@ -136,11 +134,10 @@ claude-code-savant/
 ## Development
 
 ```bash
-# Test plugin locally
+# Clone and test locally
+git clone https://github.com/rlaope/claude-code-savant.git
+cd claude-code-savant
 claude --plugin-dir .
-
-# Build MCP server
-npm run build
 
 # Run tests
 npm test
