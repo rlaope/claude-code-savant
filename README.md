@@ -136,6 +136,7 @@ The Smart Router will:
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
 | `/savant-fix` | Socrates | Error analysis, root cause debugging |
+| `/savant-update` | **Update** | Check for updates and upgrade |
 
 ### Direct Agent Calls
 
@@ -221,7 +222,8 @@ claude-code-savant/
 │   ├── savant-question.md    # /savant-question command
 │   ├── savant-code.md        # /savant-code command
 │   ├── savant-new.md         # /savant-new command
-│   └── savant-fix.md         # /savant-fix command
+│   ├── savant-fix.md         # /savant-fix command
+│   └── update.md             # /savant-update command
 └── src/                      # MCP server (alternative)
 ```
 
