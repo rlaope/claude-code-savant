@@ -11,7 +11,7 @@
       "name": "claude-code-savant",
       "source": "./",
       "description": "Smart Router + 4 personas (Einstein, Shakespeare, Steve Jobs, Socrates) with multi-language support (EN/KR/JP/CH)",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "author": {
         "name": "rlaope"
       }
