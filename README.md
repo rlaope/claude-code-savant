@@ -49,6 +49,106 @@ A Claude Code plugin that provides expert explanations through distinctive perso
 
 **See the difference?** Einstein doesn't just list information—it builds understanding from first principles.
 
+---
+
+### Standard Claude vs Steve Jobs Persona
+
+**Question: "What should be the next feature for my todo app?"**
+
+---
+
+#### Standard Claude
+
+> You could add categories, due dates, notifications, or a calendar view.
+
+---
+
+#### Steve Jobs Persona (With claude-code-savant)
+
+> ## Let's Be Honest
+>
+> Your todo app does what every other todo app does. It's fine. But "fine" doesn't change anyone's life.
+>
+> ### The Problem We're Really Solving
+> People don't need another way to list tasks. They need a way to actually *complete* them. The anxiety isn't from forgetting tasks—it's from having too many and not knowing where to start.
+>
+> ### The One Thing That Would Change Everything
+> **Kill the list. Show ONE task.**
+>
+> When users open your app, don't show 47 items screaming for attention. Show them the single most important thing they should do right now. Everything else disappears until that's done.
+>
+> ### What to Kill
+> - The "add task" button on the home screen (hide it)
+> - Categories (they create more anxiety)
+> - Badge counts (nobody needs to see "127 tasks remaining")
+>
+> ### What Would Make This Insanely Great
+> Imagine opening your todo app and feeling *calm* instead of overwhelmed. That's not a feature. That's a revolution.
+
+---
+
+**See the difference?** Steve Jobs doesn't add features—he finds the breakthrough that changes everything.
+
+---
+
+### Standard Claude vs Socrates Persona
+
+**Question: "NullPointerException at UserService.java:42"**
+
+---
+
+#### Standard Claude
+
+> You have a NullPointerException. Add a null check before line 42: `if (user != null)`.
+
+---
+
+#### Socrates Persona (With claude-code-savant)
+
+> ## NullPointerException - A Socratic Investigation
+>
+> ### The Evidence
+> The stack trace shows `NullPointerException` at `UserService.java:42`. But this is merely where the error *surfaced*, not where it was *born*.
+>
+> ### The Questions We Must Ask
+> 1. **Where did `user` come from?** Traced to line 38: `userRepository.findById(userId)`
+> 2. **When can `findById()` return null?** When the ID doesn't exist in the database
+> 3. **Why wasn't this handled?** The code assumes the user always exists
+>
+> ### Following the Trail
+> ```java
+> // Line 38: The assumption begins
+> User user = userRepository.findById(userId);  // Can return null!
+>
+> // Line 42: The assumption fails
+> return user.getDisplayName();  // NPE when user is null
+> ```
+>
+> ### The Root Cause
+> The method assumes users always exist. This fails when:
+> - User was deleted between validation and retrieval
+> - Race condition in concurrent requests
+> - Invalid userId passed from upstream
+>
+> ### Edge Cases Discovered
+> | Scenario | Why It Fails | Likelihood |
+> |----------|--------------|------------|
+> | Deleted user | No existence check | Medium |
+> | Cache inconsistency | Cached ID, deleted from DB | Medium |
+>
+> ### The Fix
+> ```java
+> User user = userRepository.findById(userId)
+>     .orElseThrow(() -> new UserNotFoundException(userId));
+> ```
+>
+> ### Why This Fix Works
+> Transforms a mysterious NPE into a clear business exception with context.
+
+---
+
+**See the difference?** Socrates doesn't patch symptoms—he traces errors to their root cause.
+
 ## Installation
 
 ### Via Marketplace (Recommended)
