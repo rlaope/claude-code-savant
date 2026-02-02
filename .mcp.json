@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "claude-code-savant": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "."
+    }
+  }
+}
