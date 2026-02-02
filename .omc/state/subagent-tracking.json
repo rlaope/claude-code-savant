@@ -1,7 +1,26 @@
 {
-  "agents": [],
-  "total_spawned": 0,
-  "total_completed": 0,
+  "agents": [
+    {
+      "agent_id": "aedbeee",
+      "agent_type": "claude-code-savant:stevejobs",
+      "started_at": "2026-02-02T09:48:15.917Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-02T09:49:07.177Z",
+      "duration_ms": 51260
+    },
+    {
+      "agent_id": "a198adb",
+      "agent_type": "Explore",
+      "started_at": "2026-02-02T09:51:08.858Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-02T09:53:17.605Z",
+      "duration_ms": 128747
+    }
+  ],
+  "total_spawned": 2,
+  "total_completed": 2,
   "total_failed": 0,
-  "last_updated": "2026-02-02T09:45:40.808Z"
+  "last_updated": "2026-02-02T09:59:34.564Z"
 }
