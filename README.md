@@ -74,7 +74,18 @@ claude --plugin-dir .
 
 ## Usage
 
-### Smart Router (Recommended)
+### Default Mode (Always-On Routing)
+
+Want Savant to automatically analyze ALL your questions? Enable default mode:
+
+```bash
+/savant-default      # Enable - all questions auto-routed
+/savant-default-off  # Disable - return to normal Claude
+```
+
+When enabled, just ask questions naturally - no commands needed!
+
+### Smart Router (On-Demand)
 
 Don't know which persona to use? Just use `/savant` and let the AI analyze your question!
 
@@ -92,6 +103,8 @@ The Smart Router will:
 
 | Command | Persona | Best For |
 |---------|---------|----------|
+| `/savant-default` | **Enable Default** | Auto-route ALL questions (always-on mode) |
+| `/savant-default-off` | **Disable Default** | Return to normal Claude behavior |
 | `/savant` | **Smart Router** | Auto-detects and recommends the best persona |
 | `/savant-question` | Einstein | General questions, deep explanations |
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
@@ -174,6 +187,8 @@ claude-code-savant/
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   └── socrates.md           # Socrates persona definition
 ├── commands/
+│   ├── default.md            # /savant-default (enable always-on mode)
+│   ├── default-off.md        # /savant-default-off (disable default mode)
 │   ├── savant.md             # /savant (smart router command)
 │   ├── savant-question.md    # /savant-question command
 │   ├── savant-code.md        # /savant-code command
