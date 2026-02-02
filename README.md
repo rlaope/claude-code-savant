@@ -74,10 +74,25 @@ claude --plugin-dir .
 
 ## Usage
 
+### Smart Router (Recommended)
+
+Don't know which persona to use? Just use `/savant` and let the AI analyze your question!
+
+```bash
+/savant [your question here]
+```
+
+The Smart Router will:
+1. Analyze your question using Opus model
+2. Recommend the best persona with reasoning
+3. Ask for your confirmation before proceeding
+4. Execute with your chosen persona
+
 ### Commands
 
 | Command | Persona | Best For |
 |---------|---------|----------|
+| `/savant` | **Smart Router** | Auto-detects and recommends the best persona |
 | `/savant-question` | Einstein | General questions, deep explanations |
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
@@ -86,6 +101,7 @@ claude --plugin-dir .
 ### Direct Agent Calls
 
 ```
+claude-code-savant:router       # Smart question analyzer (uses Opus)
 claude-code-savant:einstein     # First principles explanations
 claude-code-savant:shakespeare  # Narrative with diagrams
 claude-code-savant:stevejobs    # Visionary direction and ideas
@@ -95,6 +111,9 @@ claude-code-savant:socrates     # Error debugging and root cause analysis
 ### Examples
 
 ```bash
+# Let AI choose the best persona (Smart Router)
+/savant What is dependency injection and why do we need it?
+
 # Ask a question (Einstein)
 /savant-question What is MCP?
 
@@ -149,11 +168,13 @@ claude-code-savant/
 ├── .claude-plugin/
 │   └── plugin.json           # Plugin manifest
 ├── agents/
+│   ├── router.md             # Smart Router (question analyzer)
 │   ├── einstein.md           # Einstein persona definition
 │   ├── shakespeare.md        # Shakespeare persona definition
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   └── socrates.md           # Socrates persona definition
 ├── commands/
+│   ├── savant.md             # /savant (smart router command)
 │   ├── savant-question.md    # /savant-question command
 │   ├── savant-code.md        # /savant-code command
 │   ├── savant-new.md         # /savant-new command
