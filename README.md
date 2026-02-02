@@ -1,6 +1,6 @@
 # claude-code-savant
 
-A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, and **Steve Jobs** for visionary direction.
+A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, and **Socrates** for error debugging.
 
 ## Why Use This?
 
@@ -79,6 +79,7 @@ claude --plugin-dir .
 | `/savant-question` | Einstein | General questions, deep explanations |
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
+| `/savant-fix` | Socrates | Error analysis, root cause debugging |
 
 ### Direct Agent Calls
 
@@ -86,6 +87,7 @@ claude --plugin-dir .
 claude-code-savant:einstein     # First principles explanations
 claude-code-savant:shakespeare  # Narrative with diagrams
 claude-code-savant:stevejobs    # Visionary direction and ideas
+claude-code-savant:socrates     # Error debugging and root cause analysis
 ```
 
 ### Examples
@@ -103,6 +105,9 @@ function fibonacci(n) {
 
 # Get project direction (Steve Jobs)
 /savant-new What should be the next feature for this project?
+
+# Debug an error (Socrates)
+/savant-fix NullPointerException at UserService.java:42
 ```
 
 ## Personas
@@ -128,6 +133,13 @@ function fibonacci(n) {
 - **Output**: Clear vision with actionable ideas and what to kill
 - **Use when**: You need direction on where to take your project next
 
+### The Debugger (Socrates)
+
+- **Style**: Socratic questioning, systematic investigation
+- **Strength**: Tracing errors to root causes, finding edge cases
+- **Output**: Thorough error analysis with fixes and prevention strategies
+- **Use when**: You have an error, stack trace, or bug to investigate
+
 ## Project Structure
 
 ```
@@ -137,11 +149,13 @@ claude-code-savant/
 ├── agents/
 │   ├── einstein.md           # Einstein persona definition
 │   ├── shakespeare.md        # Shakespeare persona definition
-│   └── stevejobs.md          # Steve Jobs persona definition
+│   ├── stevejobs.md          # Steve Jobs persona definition
+│   └── socrates.md           # Socrates persona definition
 ├── commands/
 │   ├── savant-question.md    # /savant-question command
 │   ├── savant-code.md        # /savant-code command
-│   └── savant-new.md         # /savant-new command
+│   ├── savant-new.md         # /savant-new command
+│   └── savant-fix.md         # /savant-fix command
 └── src/                      # MCP server (alternative)
 ```
 
