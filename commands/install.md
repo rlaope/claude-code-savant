@@ -152,3 +152,49 @@ Enjoy! 🚀
 
 祝您使用愉快！🚀
 ```
+
+### Step 4: Star the Project ⭐
+
+Use AskUserQuestion:
+
+```
+AskUserQuestion:
+- question: "If you find Savant helpful, would you like to give it a ⭐ on GitHub?"
+- header: "Support"
+- options:
+  - label: "1. Yes, star now! (via gh CLI)"
+    description: "Automatically star using GitHub CLI"
+  - label: "2. Open GitHub page"
+    description: "I'll star it manually on the website"
+  - label: "Skip"
+    description: "Maybe later"
+```
+
+#### If Option 1 (gh CLI):
+Run the following command:
+```bash
+gh repo star rlaope/claude-code-savant
+```
+
+Then display:
+```
+⭐ Thank you for starring! Your support means a lot!
+```
+
+#### If Option 2 (Manual):
+Display:
+```
+🔗 GitHub Repository: https://github.com/rlaope/claude-code-savant
+
+Click the ⭐ Star button at the top right of the page.
+Thank you for your support! 🙏
+```
+
+#### If Skip:
+Display:
+```
+No problem! You can always star later at:
+https://github.com/rlaope/claude-code-savant
+
+Enjoy using Savant! 🎭
+```

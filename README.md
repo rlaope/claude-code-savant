@@ -205,6 +205,8 @@ Want Savant to automatically analyze ALL your questions? Enable default mode:
 
 When enabled, just ask questions naturally - no commands needed!
 
+> **Enjoying Claude Code Savant?** If this plugin helps you, consider giving it a ⭐ on [GitHub](https://github.com/rlaope/claude-code-savant)!
+
 ### Smart Router (On-Demand)
 
 Don't know which persona to use? Just use `/savant` and let the AI analyze your question!
