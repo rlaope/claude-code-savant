@@ -74,18 +74,70 @@ claude --plugin-dir .
 
 ## Usage
 
+### First-Time Setup
+
+After installation, the setup wizard runs automatically! (Or run manually: `/savant-setup`)
+
+Configure your preferences:
+- **Language**: English, 한국어, 日本語, or 中文
+- **Default Mode**: Enable/disable auto-routing
+
+### Language Settings
+
+Change language anytime:
+
+```bash
+/savant-lang         # Interactive selection
+/savant-lang en      # English
+/savant-lang kr      # 한국어
+/savant-lang jp      # 日本語
+/savant-lang ch      # 中文
+```
+
+### Default Mode (Always-On Routing)
+
+Want Savant to automatically analyze ALL your questions? Enable default mode:
+
+```bash
+/savant-default      # Enable - all questions auto-routed
+/savant-default-off  # Disable - return to normal Claude
+```
+
+When enabled, just ask questions naturally - no commands needed!
+
+### Smart Router (On-Demand)
+
+Don't know which persona to use? Just use `/savant` and let the AI analyze your question!
+
+```bash
+/savant [your question here]
+```
+
+The Smart Router will:
+1. Analyze your question using Opus model
+2. Recommend the best persona with reasoning
+3. Ask for your confirmation before proceeding
+4. Execute with your chosen persona
+
 ### Commands
 
 | Command | Persona | Best For |
 |---------|---------|----------|
+| `/savant-setup` | **Setup Wizard** | First-time configuration (language, default mode) |
+| `/savant-lang` | **Language** | Change response language (en/kr/jp/ch) |
+| `/savant-default` | **Enable Default** | Auto-route ALL questions (always-on mode) |
+| `/savant-default-off` | **Disable Default** | Return to normal Claude behavior |
+| `/savant` | **Smart Router** | Auto-detects and recommends the best persona |
 | `/savant-question` | Einstein | General questions, deep explanations |
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
 | `/savant-fix` | Socrates | Error analysis, root cause debugging |
+| `/savant-update` | **Update** | Check for updates and upgrade |
 
 ### Direct Agent Calls
 
 ```
+claude-code-savant:router       # Smart question analyzer (uses Opus)
 claude-code-savant:einstein     # First principles explanations
 claude-code-savant:shakespeare  # Narrative with diagrams
 claude-code-savant:stevejobs    # Visionary direction and ideas
@@ -95,6 +147,9 @@ claude-code-savant:socrates     # Error debugging and root cause analysis
 ### Examples
 
 ```bash
+# Let AI choose the best persona (Smart Router)
+/savant What is dependency injection and why do we need it?
+
 # Ask a question (Einstein)
 /savant-question What is MCP?
 
@@ -149,15 +204,23 @@ claude-code-savant/
 ├── .claude-plugin/
 │   └── plugin.json           # Plugin manifest
 ├── agents/
+│   ├── router.md             # Smart Router (question analyzer)
 │   ├── einstein.md           # Einstein persona definition
 │   ├── shakespeare.md        # Shakespeare persona definition
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   └── socrates.md           # Socrates persona definition
 ├── commands/
+│   ├── install.md            # Auto-runs on first install
+│   ├── setup.md              # /savant-setup (manual setup wizard)
+│   ├── lang.md               # /savant-lang (language settings)
+│   ├── default.md            # /savant-default (enable always-on mode)
+│   ├── default-off.md        # /savant-default-off (disable default mode)
+│   ├── savant.md             # /savant (smart router command)
 │   ├── savant-question.md    # /savant-question command
 │   ├── savant-code.md        # /savant-code command
 │   ├── savant-new.md         # /savant-new command
-│   └── savant-fix.md         # /savant-fix command
+│   ├── savant-fix.md         # /savant-fix command
+│   └── update.md             # /savant-update command
 └── src/                      # MCP server (alternative)
 ```
 
@@ -171,6 +234,20 @@ claude --plugin-dir .
 
 # Run tests
 npm test
+```
+
+## Updating
+
+Check for updates and upgrade:
+
+```bash
+/savant-update
+```
+
+Or manually:
+
+```bash
+/plugin update claude-code-savant
 ```
 
 ## License
