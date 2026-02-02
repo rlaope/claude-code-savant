@@ -2,6 +2,8 @@
 
 A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, and **Socrates** for error debugging.
 
+![](./assets/savant.png)
+
 ## Why Use This?
 
 ### Standard Claude Answer vs Einstein Persona
