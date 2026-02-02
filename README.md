@@ -76,13 +76,9 @@ claude --plugin-dir .
 
 ### First-Time Setup
 
-After installation, run the setup wizard:
+After installation, the setup wizard runs automatically! (Or run manually: `/savant-setup`)
 
-```bash
-/savant-setup
-```
-
-This will configure:
+Configure your preferences:
 - **Language**: English, 한국어, 日本語, or 中文
 - **Default Mode**: Enable/disable auto-routing
 
@@ -214,7 +210,8 @@ claude-code-savant/
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   └── socrates.md           # Socrates persona definition
 ├── commands/
-│   ├── setup.md              # /savant-setup (first-time wizard)
+│   ├── install.md            # Auto-runs on first install
+│   ├── setup.md              # /savant-setup (manual setup wizard)
 │   ├── lang.md               # /savant-lang (language settings)
 │   ├── default.md            # /savant-default (enable always-on mode)
 │   ├── default-off.md        # /savant-default-off (disable default mode)
@@ -237,6 +234,20 @@ claude --plugin-dir .
 
 # Run tests
 npm test
+```
+
+## Updating
+
+Check for updates and upgrade:
+
+```bash
+/savant-update
+```
+
+Or manually:
+
+```bash
+/plugin update claude-code-savant
 ```
 
 ## License
