@@ -3,6 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerClaudeDocsExpertTool } from "./tools/claudeDocsExpert.js";
+import { registerConsensusTool } from "./tools/consensusTool.js";
 
 const SERVER_NAME = "claude-code-savant";
 const SERVER_VERSION = "1.0.0";
@@ -22,6 +23,9 @@ async function main(): Promise<void> {
   // Register tools
   registerClaudeDocsExpertTool(server);
   console.error(`[${SERVER_NAME}] Registered tool: claude_docs_expert`);
+
+  registerConsensusTool(server);
+  console.error(`[${SERVER_NAME}] Registered tool: savant_consensus`);
 
   // Connect via STDIO transport
   const transport = new StdioServerTransport();
