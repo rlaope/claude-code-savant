@@ -74,6 +74,30 @@ claude --plugin-dir .
 
 ## Usage
 
+### First-Time Setup
+
+After installation, run the setup wizard:
+
+```bash
+/savant-setup
+```
+
+This will configure:
+- **Language**: English, 한국어, 日本語, or 中文
+- **Default Mode**: Enable/disable auto-routing
+
+### Language Settings
+
+Change language anytime:
+
+```bash
+/savant-lang         # Interactive selection
+/savant-lang en      # English
+/savant-lang kr      # 한국어
+/savant-lang jp      # 日本語
+/savant-lang ch      # 中文
+```
+
 ### Default Mode (Always-On Routing)
 
 Want Savant to automatically analyze ALL your questions? Enable default mode:
@@ -103,6 +127,8 @@ The Smart Router will:
 
 | Command | Persona | Best For |
 |---------|---------|----------|
+| `/savant-setup` | **Setup Wizard** | First-time configuration (language, default mode) |
+| `/savant-lang` | **Language** | Change response language (en/kr/jp/ch) |
 | `/savant-default` | **Enable Default** | Auto-route ALL questions (always-on mode) |
 | `/savant-default-off` | **Disable Default** | Return to normal Claude behavior |
 | `/savant` | **Smart Router** | Auto-detects and recommends the best persona |
@@ -187,6 +213,8 @@ claude-code-savant/
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   └── socrates.md           # Socrates persona definition
 ├── commands/
+│   ├── setup.md              # /savant-setup (first-time wizard)
+│   ├── lang.md               # /savant-lang (language settings)
 │   ├── default.md            # /savant-default (enable always-on mode)
 │   ├── default-off.md        # /savant-default-off (disable default mode)
 │   ├── savant.md             # /savant (smart router command)
