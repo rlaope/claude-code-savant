@@ -1,6 +1,6 @@
 # claude-code-savant
 
-A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives and **Einstein** for deep understanding.
+A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, and **Steve Jobs** for visionary direction.
 
 ## Why Use This?
 
@@ -78,12 +78,14 @@ claude --plugin-dir .
 |---------|---------|----------|
 | `/savant-question` | Einstein | General questions, deep explanations |
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
+| `/savant-new` | Steve Jobs | Project vision and next-step ideas |
 
 ### Direct Agent Calls
 
 ```
 claude-code-savant:einstein     # First principles explanations
 claude-code-savant:shakespeare  # Narrative with diagrams
+claude-code-savant:stevejobs    # Visionary direction and ideas
 ```
 
 ### Examples
@@ -98,6 +100,9 @@ function fibonacci(n) {
   if (n <= 1) return n;
   return fibonacci(n-1) + fibonacci(n-2);
 }
+
+# Get project direction (Steve Jobs)
+/savant-new What should be the next feature for this project?
 ```
 
 ## Personas
@@ -116,6 +121,13 @@ function fibonacci(n) {
 - **Output**: Rich narratives with Mermaid flowcharts
 - **Use when**: Analyzing code structure and flow visually
 
+### The Visionary (Steve Jobs)
+
+- **Style**: Bold, direct, user-obsessed thinking
+- **Strength**: Seeing the next evolution and breakthrough opportunities
+- **Output**: Clear vision with actionable ideas and what to kill
+- **Use when**: You need direction on where to take your project next
+
 ## Project Structure
 
 ```
@@ -124,10 +136,12 @@ claude-code-savant/
 │   └── plugin.json           # Plugin manifest
 ├── agents/
 │   ├── einstein.md           # Einstein persona definition
-│   └── shakespeare.md        # Shakespeare persona definition
+│   ├── shakespeare.md        # Shakespeare persona definition
+│   └── stevejobs.md          # Steve Jobs persona definition
 ├── commands/
 │   ├── savant-question.md    # /savant-question command
-│   └── savant-code.md        # /savant-code command
+│   ├── savant-code.md        # /savant-code command
+│   └── savant-new.md         # /savant-new command
 └── src/                      # MCP server (alternative)
 ```
 
