@@ -119,6 +119,18 @@ describe("Persona Factory", () => {
     const personas = getAvailablePersonas();
     expect(personas).toContain("shakespeare");
     expect(personas).toContain("einstein");
-    expect(personas.length).toBe(2);
+    expect(personas).toContain("stevejobs");
+    expect(personas).toContain("socrates");
+    expect(personas.length).toBe(4);
+  });
+
+  it("should return stevejobs persona", () => {
+    const persona = getPersona("stevejobs");
+    expect(persona.name).toBe("stevejobs");
+  });
+
+  it("should return socrates persona", () => {
+    const persona = getPersona("socrates");
+    expect(persona.name).toBe("socrates");
   });
 });
