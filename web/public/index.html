@@ -675,11 +675,10 @@ function renderPersonaList() {
     const isGateway = p.id === 'sayno';
     const toggleHtml = isGateway ? '' :
       `<div class="biz-toggle ${enabled ? 'on' : ''}" onclick="event.stopPropagation(); toggleBiz('${p.id}')"></div>`;
-    const itemClass = enabled || isGateway ? '' : 'opacity:0.4;';
-    const clickable = enabled || isGateway ? `onclick="selectChat('${p.id}')"` : `onclick="toggleBiz('${p.id}')"`;
+    const itemClass = enabled || isGateway ? '' : 'opacity:0.5;';
     return `
       <div class="persona-item ${activeChat === p.id ? 'active' : ''}"
-           ${clickable} id="chat-${p.id}" style="${itemClass}">
+           onclick="selectBizChat('${p.id}')" id="chat-${p.id}" style="${itemClass}">
         <div class="avatar" style="background:${p.color}">${p.initial}</div>
         <div class="persona-info">
           <div class="name">${lang === 'ko' ? p.nameKo : p.name}</div>
@@ -725,9 +724,22 @@ function toggleCategory(cat) {
   renderPersonaList();
 }
 
+function selectBizChat(id) {
+  // Clicking a biz agent always opens it; auto-enable if needed
+  if (!isBizEnabled(id) && id !== 'sayno') {
+    setBizEnabled(id, true);
+  }
+  selectChat(id);
+  renderPersonaList();
+}
+
 function toggleBiz(id) {
   const current = isBizEnabled(id);
   setBizEnabled(id, !current);
+  // If disabling the currently active chat, switch to sayno
+  if (current && activeChat === id) {
+    selectChat('sayno');
+  }
   renderPersonaList();
 }
 

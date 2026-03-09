@@ -1,6 +1,6 @@
 {
   "name": "claude-code-savant",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "MCP server providing expert code explanations through Shakespeare and Einstein personas",
   "type": "module",
   "main": "dist/index.js",
