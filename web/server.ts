@@ -135,10 +135,10 @@ function collectFiles(dir: string, maxDepth: number, depth = 0): string[] {
 function loadPersonas(): Map<string, PersonaInfo> {
   const personas = new Map<string, PersonaInfo>();
   const meta: Record<string, { name: string; nameKo: string; title: string; titleKo: string; initial: string; color: string }> = {
-    einstein:    { name: "Einstein",    nameKo: "아인슈타인", title: "The Professor",  titleKo: "교수",    initial: "E", color: "#6C5CE7" },
-    shakespeare: { name: "Shakespeare", nameKo: "셰익스피어", title: "The Bard",       titleKo: "이야기꾼", initial: "S", color: "#E17055" },
-    socrates:    { name: "Socrates",    nameKo: "소크라테스",  title: "The Debugger",   titleKo: "디버거",   initial: "So", color: "#00B894" },
-    stevejobs:   { name: "Steve Jobs",  nameKo: "스티브 잡스", title: "The Visionary",  titleKo: "비전가",   initial: "J", color: "#0984E3" },
+    einstein:    { name: "Einstein",    nameKo: "아인슈타인", title: "The Professor",  titleKo: "개념 정리 에이전트",     initial: "E", color: "#6C5CE7" },
+    shakespeare: { name: "Shakespeare", nameKo: "셰익스피어", title: "The Bard",       titleKo: "코드 분석 에이전트",     initial: "S", color: "#E17055" },
+    socrates:    { name: "Socrates",    nameKo: "소크라테스",  title: "The Debugger",   titleKo: "디버깅 에이전트",        initial: "So", color: "#00B894" },
+    stevejobs:   { name: "Steve Jobs",  nameKo: "스티브 잡스", title: "The Visionary",  titleKo: "방향 제시 에이전트",     initial: "J", color: "#0984E3" },
   };
 
   for (const [id, info] of Object.entries(meta)) {
@@ -159,6 +159,22 @@ console.log(`\n  Project: ${path.basename(PROJECT_DIR)}`);
 console.log(`  Context: ${(projectContext.length / 1024).toFixed(1)}KB\n`);
 
 // ── Helpers ──────────────────────────────────────────────────────
+function formatApiError(raw: string): string {
+  if (raw.includes("credit balance is too low")) {
+    return "Anthropic API 크레딧이 부족합니다. https://console.anthropic.com/settings/plans 에서 충전해주세요.";
+  }
+  if (raw.includes("invalid x-api-key") || raw.includes("invalid api key")) {
+    return "API 키가 유효하지 않습니다. 키를 확인하고 다시 설정해주세요.";
+  }
+  if (raw.includes("rate limit")) {
+    return "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (raw.includes("overloaded")) {
+    return "Anthropic 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.";
+  }
+  return raw;
+}
+
 function getClient(req?: express.Request): Anthropic {
   const apiKey = req?.headers["x-api-key"] as string || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
@@ -254,7 +270,8 @@ async function streamChat(
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+    const raw = err instanceof Error ? err.message : "Unknown error";
+    const message = formatApiError(raw);
     res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
     res.end();
   }
