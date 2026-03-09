@@ -402,6 +402,11 @@
     </div>
     <div class="persona-list" id="personaList"></div>
     <div class="sidebar-bottom">
+      <div class="lang-toggle" style="margin-bottom:4px">
+        <button class="active" onclick="setProvider('anthropic')" id="provAnthropic">Claude</button>
+        <button onclick="setProvider('openai')" id="provOpenai">GPT</button>
+        <button onclick="setProvider('gemini')" id="provGemini">Gemini</button>
+      </div>
       <div class="lang-toggle">
         <button class="active" onclick="setLang('en')" id="langEn">EN</button>
         <button onclick="setLang('ko')" id="langKo">KO</button>
@@ -450,6 +455,15 @@ let chatHistories = {};
 let isStreaming = false;
 let lang = localStorage.getItem('savant-lang') || 'en';
 let apiKey = localStorage.getItem('savant-api-key') || '';
+let provider = localStorage.getItem('savant-provider') || 'anthropic';
+
+const providerNames = { anthropic: 'Claude', openai: 'GPT', gemini: 'Gemini' };
+const providerKeyNames = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY' };
+const providerKeyLinks = {
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openai: 'https://platform.openai.com/api-keys',
+  gemini: 'https://aistudio.google.com/apikey',
+};
 
 const i18n = {
   en: {
@@ -500,9 +514,25 @@ async function init() {
   document.getElementById('projectName').textContent = project.name;
   document.title = `Savant Chat · ${project.name}`;
 
+  apiKey = localStorage.getItem(`savant-api-key-${provider}`) || '';
   applyLang();
+  applyProviderButtons();
   renderPersonaList();
   if (personas.length > 0) selectChat(personas[0].id);
+}
+
+function setProvider(p) {
+  provider = p;
+  localStorage.setItem('savant-provider', p);
+  // Update API key for this provider
+  apiKey = localStorage.getItem(`savant-api-key-${p}`) || '';
+  applyProviderButtons();
+}
+
+function applyProviderButtons() {
+  document.getElementById('provAnthropic').className = provider === 'anthropic' ? 'active' : '';
+  document.getElementById('provOpenai').className = provider === 'openai' ? 'active' : '';
+  document.getElementById('provGemini').className = provider === 'gemini' ? 'active' : '';
 }
 
 function setLang(l) {
@@ -669,8 +699,8 @@ async function sendMessage() {
   const isGroup = activeChat === 'group';
   const endpoint = isGroup ? '/api/chat/group' : '/api/chat';
   const body = isGroup
-    ? { messages: history.map(m => ({ role: m.role, content: m.content })), lang }
-    : { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang };
+    ? { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider }
+    : { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider };
 
   try {
     const response = await fetch(endpoint, {
@@ -750,6 +780,19 @@ async function sendMessage() {
 
 // ── API Key ──────────────────────────
 function showApiKeyModal() {
+  const name = providerNames[provider] || provider;
+  const envKey = providerKeyNames[provider] || 'API_KEY';
+  const link = providerKeyLinks[provider] || '#';
+  document.getElementById('modalTitle').textContent =
+    lang === 'ko' ? `${name} API 키 설정` : `${name} API Key`;
+  document.getElementById('modalDesc').textContent =
+    lang === 'ko' ? `${name}와 대화하려면 API 키가 필요합니다.` : `You need a ${name} API key to chat.`;
+  document.getElementById('modalGetKey').textContent =
+    lang === 'ko' ? `${name} 키 발급` : `Get ${name} Key`;
+  document.getElementById('modalGetKey').closest('a').href = link;
+  document.getElementById('modalHint').innerHTML =
+    `${lang === 'ko' ? '터미널에서 설정:' : 'Or set in terminal:'} <code>export ${envKey}=...</code>`;
+  document.getElementById('apiKeyInput').placeholder = provider === 'anthropic' ? 'sk-ant-...' : provider === 'openai' ? 'sk-...' : 'AI...';
   document.getElementById('apiKeyModal').classList.remove('hidden');
   document.getElementById('apiKeyInput').value = apiKey;
   document.getElementById('apiKeyInput').focus();
@@ -759,7 +802,7 @@ function saveApiKey() {
   const val = document.getElementById('apiKeyInput').value.trim();
   if (val) {
     apiKey = val;
-    localStorage.setItem('savant-api-key', val);
+    localStorage.setItem(`savant-api-key-${provider}`, val);
   }
   document.getElementById('apiKeyModal').classList.add('hidden');
 }
