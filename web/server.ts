@@ -6,9 +6,20 @@ import cors from "cors";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 
-type Provider = "anthropic" | "openai" | "gemini";
+type Provider = "local" | "anthropic" | "openai" | "gemini";
+
+// Check if claude CLI is available
+function isClaudeCliAvailable(): boolean {
+  try {
+    execSync("which claude", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const claudeCliAvailable = isClaudeCliAvailable();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -220,7 +231,8 @@ const personas = loadPersonas();
 const projectContext = scanProject(PROJECT_DIR);
 
 console.log(`\n  Project: ${path.basename(PROJECT_DIR)}`);
-console.log(`  Context: ${(projectContext.length / 1024).toFixed(1)}KB\n`);
+console.log(`  Context: ${(projectContext.length / 1024).toFixed(1)}KB`);
+console.log(`  Claude CLI: ${claudeCliAvailable ? "available (default provider)" : "not found"}\n`);
 
 // ── Helpers ──────────────────────────────────────────────────────
 function formatApiError(raw: string): string {
@@ -240,18 +252,21 @@ function formatApiError(raw: string): string {
 }
 
 const PROVIDER_MODELS: Record<Provider, string> = {
+  local: "claude-code",
   anthropic: "claude-sonnet-4-20250514",
   openai: "gpt-4o",
   gemini: "gemini-2.0-flash",
 };
 
 const PROVIDER_ENV_KEYS: Record<Provider, string> = {
+  local: "",
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   gemini: "GEMINI_API_KEY",
 };
 
 function getApiKey(provider: Provider, req?: express.Request): string {
+  if (provider === "local") return "";
   const headerKey = req?.headers["x-api-key"] as string;
   const envKey = process.env[PROVIDER_ENV_KEYS[provider]];
   const key = headerKey || envKey;
@@ -394,6 +409,82 @@ async function streamGemini(
   }
 }
 
+async function streamLocal(
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  res: express.Response
+): Promise<void> {
+  const historyParts = messages.slice(0, -1).map(m =>
+    `**${m.role === "user" ? "User" : "Assistant"}**: ${m.content}`
+  );
+  const lastMsg = messages[messages.length - 1]?.content || "";
+
+  const fullPrompt = [
+    systemPrompt,
+    "---",
+    ...(historyParts.length > 0 ? ["## Conversation History", ...historyParts, "---"] : []),
+    lastMsg,
+  ].join("\n\n");
+
+  res.write(`data: ${JSON.stringify({ status: "Initializing Claude Code..." })}\n\n`);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn("claude", ["-p", fullPrompt, "--output-format", "stream-json"], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let buffer = "";
+    let hasText = false;
+
+    proc.stdout.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+
+          if (event.type === "system" && event.subtype === "init") {
+            res.write(`data: ${JSON.stringify({ status: "Thinking..." })}\n\n`);
+          } else if (event.type === "content_block_start" && event.content_block?.type === "thinking") {
+            res.write(`data: ${JSON.stringify({ status: "Deep thinking..." })}\n\n`);
+          } else if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+            if (!hasText) {
+              res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
+              hasText = true;
+            }
+            res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+          } else if (event.type === "result" && event.result && !hasText) {
+            res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
+            res.write(`data: ${JSON.stringify({ text: event.result })}\n\n`);
+            hasText = true;
+          }
+        } catch { /* ignore non-JSON lines */ }
+      }
+    });
+
+    proc.stderr.on("data", () => { /* claude CLI status output, ignore */ });
+
+    proc.on("close", () => {
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          if (event.type === "result" && event.result && !hasText) {
+            res.write(`data: ${JSON.stringify({ text: event.result })}\n\n`);
+          }
+        } catch { /* ignore */ }
+      }
+      resolve();
+    });
+
+    proc.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
 async function streamChat(
   req: express.Request,
   res: express.Response,
@@ -406,10 +497,15 @@ async function streamChat(
   res.setHeader("Connection", "keep-alive");
 
   try {
-    const apiKey = getApiKey(provider, req);
-    if (provider === "openai") await streamOpenAI(apiKey, systemPrompt, messages, res);
-    else if (provider === "gemini") await streamGemini(apiKey, systemPrompt, messages, res);
-    else await streamAnthropic(apiKey, systemPrompt, messages, res);
+    if (provider === "local") {
+      if (!claudeCliAvailable) throw new Error("Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code");
+      await streamLocal(systemPrompt, messages, res);
+    } else {
+      const apiKey = getApiKey(provider, req);
+      if (provider === "openai") await streamOpenAI(apiKey, systemPrompt, messages, res);
+      else if (provider === "gemini") await streamGemini(apiKey, systemPrompt, messages, res);
+      else await streamAnthropic(apiKey, systemPrompt, messages, res);
+    }
 
     res.write("data: [DONE]\n\n");
     res.end();
@@ -493,6 +589,7 @@ app.post("/api/read-file", (req, res) => {
 // Available providers
 app.get("/api/providers", (_req, res) => {
   res.json([
+    { id: "local", name: "Claude Code", model: "claude-code", envKey: "", available: claudeCliAvailable },
     { id: "anthropic", name: "Claude", model: PROVIDER_MODELS.anthropic, envKey: "ANTHROPIC_API_KEY" },
     { id: "openai", name: "GPT", model: PROVIDER_MODELS.openai, envKey: "OPENAI_API_KEY" },
     { id: "gemini", name: "Gemini", model: PROVIDER_MODELS.gemini, envKey: "GEMINI_API_KEY" },

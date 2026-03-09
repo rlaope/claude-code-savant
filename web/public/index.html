@@ -237,6 +237,18 @@
       30% { transform: translateY(-5px); opacity: 1; }
     }
 
+    .thinking-status {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+      min-height: 16px;
+      animation: statusPulse 2s ease-in-out infinite;
+    }
+    @keyframes statusPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
     /* ── Input ─────────────────────────── */
     .input-area { padding: 12px 20px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
     .input-wrapper {
@@ -492,7 +504,8 @@
     <div class="persona-list" id="personaList"></div>
     <div class="sidebar-bottom">
       <div class="lang-toggle" style="margin-bottom:4px">
-        <button class="active" onclick="setProvider('anthropic')" id="provAnthropic">Claude</button>
+        <button class="active" onclick="setProvider('local')" id="provLocal">Claude Code</button>
+        <button onclick="setProvider('anthropic')" id="provAnthropic">Claude</button>
         <button onclick="setProvider('openai')" id="provOpenai">GPT</button>
         <button onclick="setProvider('gemini')" id="provGemini">Gemini</button>
       </div>
@@ -544,7 +557,7 @@ let chatHistories = {};
 let isStreaming = false;
 let lang = localStorage.getItem('savant-lang') || 'en';
 let apiKey = localStorage.getItem('savant-api-key') || '';
-let provider = localStorage.getItem('savant-provider') || 'anthropic';
+let provider = localStorage.getItem('savant-provider') || 'local';
 let bizCollapsed = localStorage.getItem('savant-biz-collapsed') === 'true';
 
 // Biz agent activation state (localStorage)
@@ -565,13 +578,20 @@ function getActiveBizIds() {
   return personas.filter(p => p.category === 'biz' && isBizEnabled(p.id)).map(p => p.id);
 }
 
-const providerNames = { anthropic: 'Claude', openai: 'GPT', gemini: 'Gemini' };
-const providerKeyNames = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY' };
+const providerNames = { local: 'Claude Code', anthropic: 'Claude', openai: 'GPT', gemini: 'Gemini' };
+const providerKeyNames = { local: '', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY' };
 const providerKeyLinks = {
+  local: '',
   anthropic: 'https://console.anthropic.com/settings/keys',
   openai: 'https://platform.openai.com/api-keys',
   gemini: 'https://aistudio.google.com/apikey',
 };
+
+const thinkingMessages = {
+  en: ['Thinking...', 'Analyzing project...', 'Reading codebase...', 'Preparing response...', 'Almost there...'],
+  ko: ['생각 중...', '프로젝트 분석 중...', '코드 읽는 중...', '답변 준비 중...', '거의 다 됐어요...'],
+};
+let thinkingInterval = null;
 
 const i18n = {
   en: {
@@ -647,9 +667,13 @@ function setProvider(p) {
 }
 
 function applyProviderButtons() {
+  document.getElementById('provLocal').className = provider === 'local' ? 'active' : '';
   document.getElementById('provAnthropic').className = provider === 'anthropic' ? 'active' : '';
   document.getElementById('provOpenai').className = provider === 'openai' ? 'active' : '';
   document.getElementById('provGemini').className = provider === 'gemini' ? 'active' : '';
+  // Hide API Key button when using local provider
+  const apiKeyBtn = document.querySelector('.sidebar-bottom .secondary');
+  if (apiKeyBtn) apiKeyBtn.style.display = provider === 'local' ? 'none' : '';
 }
 
 function setLang(l) {
@@ -1001,13 +1025,34 @@ async function sendMessage() {
     : `class="avatar sm" style="background:${p?.color||'#666'}"`;
   const avText = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
   typingEl.innerHTML = `<div ${avStyle}>${avText}</div>
-    <div class="bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+    <div class="bubble">
+      <div class="typing-indicator"><span></span><span></span><span></span></div>
+      <div class="thinking-status" id="thinkingStatus"></div>
+    </div>`;
   container.appendChild(typingEl);
   scrollToBottom();
 
   isStreaming = true;
   document.getElementById('sendBtn').disabled = true;
   document.getElementById('headerStatus').textContent = t('typing');
+
+  // Start thinking message cycling for local provider
+  if (provider === 'local') {
+    let thinkIdx = 0;
+    const msgs = thinkingMessages[lang] || thinkingMessages.en;
+    const statusEl = document.getElementById('thinkingStatus');
+    if (statusEl) statusEl.textContent = msgs[0];
+    thinkingInterval = setInterval(() => {
+      thinkIdx = (thinkIdx + 1) % msgs.length;
+      const el = document.getElementById('thinkingStatus');
+      if (el) {
+        el.style.opacity = '0';
+        setTimeout(() => {
+          if (el) { el.textContent = msgs[thinkIdx]; el.style.opacity = '1'; }
+        }, 300);
+      }
+    }, 3000);
+  }
 
   const isBizGroup = activeChat === 'biz-group';
   const isDevGroup = activeChat === 'group';
@@ -1031,10 +1076,11 @@ async function sendMessage() {
       body: JSON.stringify(body),
     });
 
-    // Check for API key error
-    if (response.status === 500) {
+    // Check for API key error (skip for local provider)
+    if (response.status === 500 && provider !== 'local') {
       const errText = await response.text();
-      if (errText.includes('ANTHROPIC_API_KEY')) {
+      if (errText.includes('API_KEY')) {
+        if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
         typingEl.remove();
         history.pop(); // remove user msg
         showApiKeyModal();
@@ -1071,8 +1117,22 @@ async function sendMessage() {
         if (data === '[DONE]') continue;
         try {
           const parsed = JSON.parse(data);
-          if (parsed.error) assistantText += `\n\n**Error**: ${parsed.error}`;
-          else if (parsed.text) assistantText += parsed.text;
+          if (parsed.status !== undefined) {
+            // Server-sent status update (local provider)
+            const statusEl = document.getElementById('thinkingStatus');
+            if (statusEl) {
+              if (parsed.status === '') {
+                // Clear thinking — text is about to arrive
+                if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+              } else {
+                statusEl.textContent = parsed.status;
+              }
+            }
+          } else if (parsed.error) {
+            assistantText += `\n\n**Error**: ${parsed.error}`;
+          } else if (parsed.text) {
+            assistantText += parsed.text;
+          }
         } catch {}
       }
 
@@ -1086,11 +1146,13 @@ async function sendMessage() {
 
     history[history.length - 1].content = assistantText;
   } catch (err) {
+    if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
     typingEl?.remove();
     history.push({ role: 'assistant', content: `**Error**: ${err.message}` });
     renderMessages();
   }
 
+  if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
   isStreaming = false;
   document.getElementById('sendBtn').disabled = false;
   const statusText = activeChat === 'biz-group' ? t('bizGroupTitle') : activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? p?.titleKo : p?.title);
