@@ -645,7 +645,20 @@ function renderMessages() {
 
   const p = activeChat === 'group' ? null : personas.find(x => x.id === activeChat);
 
-  container.innerHTML = history.map(msg => {
+  // Prepend welcome bubble before chat history
+  const isGroup2 = activeChat === 'group';
+  const wavStyle = isGroup2
+    ? 'class="avatar sm group-av"'
+    : `class="avatar sm" style="background:${p?.color||'#666'}"`;
+  const wavText = isGroup2 ? 'All' : (p?.initial || '?');
+  const welcomePrefix = `
+    <div class="message-row assistant" style="margin-top:20px;opacity:0.7;">
+      <div ${wavStyle}>${wavText}</div>
+      <div class="bubble">${marked.parse(getWelcomeBubble(activeChat), { breaks: true })}</div>
+    </div>
+  `;
+
+  container.innerHTML = welcomePrefix + history.map(msg => {
     if (msg.role === 'user') {
       return `<div class="message-row user">
         <div class="avatar sm" style="background:#1a1a1a;font-size:9px;">You</div>
