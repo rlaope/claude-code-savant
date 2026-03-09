@@ -421,6 +421,7 @@
         <button onclick="setLang('ko')" id="langKo">KO</button>
       </div>
       <button class="secondary" onclick="showApiKeyModal()"><span class="t" data-en="API Key" data-ko="API 키 설정">API Key</span></button>
+      <button class="secondary" onclick="downloadChat()"><span class="t" data-en="Export Chat" data-ko="대화 추출">Export Chat</span></button>
     </div>
   </aside>
 
@@ -591,7 +592,20 @@ function renderPersonaList() {
     </div>
   `;
 
-  list.innerHTML = items + groupItem;
+  const addAgentItem = `
+    <a href="https://github.com/rlaope/claude-code-savant/issues" target="_blank"
+       style="text-decoration:none;">
+      <div class="persona-item" style="margin-top:8px; border:1px dashed #ddd; background:#fafafa; opacity:0.7;">
+        <div class="avatar sm" style="background:#ddd; color:#999; font-size:16px;">+</div>
+        <div class="persona-info">
+          <div class="name" style="color:#999;">${lang === 'ko' ? '새 에이전트 추가 요청' : 'Request a New Agent'}</div>
+          <div class="title">${lang === 'ko' ? 'GitHub Issue로 제안하기' : 'Suggest via GitHub Issue'}</div>
+        </div>
+      </div>
+    </a>
+  `;
+
+  list.innerHTML = items + groupItem + addAgentItem;
 }
 
 function selectChat(id) {
@@ -860,6 +874,25 @@ function clearChat() {
     renderMessages();
     document.getElementById('input').focus();
   }
+}
+
+function downloadChat() {
+  const history = chatHistories[activeChat] || [];
+  if (history.length === 0) return;
+
+  const pName = document.getElementById('projectName').textContent || 'project';
+  const chatName = activeChat === 'group' ? 'team-chat' : activeChat;
+  const lines = [`# Savant Chat — ${pName} / ${chatName}\n`];
+  for (const msg of history) {
+    const role = msg.role === 'user' ? 'You' : chatName;
+    lines.push(`## ${role}\n\n${msg.content}\n`);
+  }
+  const blob = new Blob([lines.join('\n---\n\n')], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `savant-chat-${chatName}-${Date.now()}.md`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function handleKeydown(e) {

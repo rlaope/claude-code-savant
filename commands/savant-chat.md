@@ -1,31 +1,35 @@
 ---
-description: "Launch Savant Chat - a web-based messenger UI to chat with AI personas about your current project"
+description: "Launch Savant Chat - web messenger UI to chat with AI personas about your project"
 ---
 
 # Savant Chat Launcher
 
-Launch the Savant Chat web interface. This opens a local messenger-style UI where you can chat with 4 AI personas (Einstein, Shakespeare, Socrates, Steve Jobs) who understand your current project context.
+Launch the Savant Chat web interface directly from Claude Code.
 
-## What to do
+## Instructions
 
-1. Build and start the Savant Chat server
-2. The server will scan the current project directory automatically
-3. Open the browser to the chat UI
+You MUST execute these steps in order:
 
-Run this command:
+1. Find the claude-code-savant plugin directory. Check these locations:
+   - `~/.claude/plugins/claude-code-savant/`
+   - The directory where this command file lives (go up one level from `commands/`)
+   - Search for `claude-code-savant` in common plugin paths
 
+2. Build the web server (if not already built):
 ```bash
-cd <project_root>/web && npx tsc && PROJECT_DIR=$(pwd)/.. node dist/server.js
+cd <plugin_dir>/web && npx tsc 2>/dev/null
 ```
 
-Then open http://localhost:3456 in the browser.
+3. Start the server with the USER'S CURRENT PROJECT as context (not the plugin directory):
+```bash
+cd <plugin_dir>/web && PROJECT_DIR=<user_cwd> node dist/server.js &
+```
 
-## Features
+4. Tell the user to open http://localhost:3456 (or the next available port)
 
-- **Einstein** (The Professor): First-principles explanations
-- **Shakespeare** (The Bard): Code analysis with narrative and flowcharts
-- **Socrates** (The Debugger): Root cause investigation
-- **Steve Jobs** (The Visionary): Bold project direction
-- **Team Chat**: All 4 personas discuss together
-- **Language Toggle**: English / Korean
-- **Project Context**: Click the project badge to see what the AI knows
+5. If the build fails because dependencies aren't installed, run:
+```bash
+cd <plugin_dir> && npm install && cd web && npx tsc
+```
+
+IMPORTANT: `PROJECT_DIR` must be set to the user's current working directory, NOT the plugin directory. This is what gives the personas context about the user's project.
