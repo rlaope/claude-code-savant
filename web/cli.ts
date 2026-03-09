@@ -40,18 +40,31 @@ const child = spawn("node", [serverPath], {
     PROJECT_DIR: projectDir,
     PORT: port,
   },
-  stdio: "inherit",
+  stdio: ["inherit", "pipe", "inherit"],
 });
 
-// Open browser after short delay
-setTimeout(() => {
-  const url = `http://localhost:${port}`;
-  try {
-    if (process.platform === "darwin") execSync(`open ${url}`);
-    else if (process.platform === "linux") execSync(`xdg-open ${url}`);
-    else if (process.platform === "win32") execSync(`start ${url}`);
-  } catch { /* ignore if browser open fails */ }
-}, 1500);
+// Detect actual port from server output and open browser
+let opened = false;
+child.stdout?.on("data", (data: Buffer) => {
+  const text = data.toString();
+  process.stdout.write(text);
+
+  if (!opened) {
+    const match = text.match(/localhost:(\d+)/);
+    if (match) {
+      opened = true;
+      const actualPort = match[1];
+      const url = `http://localhost:${actualPort}`;
+      setTimeout(() => {
+        try {
+          if (process.platform === "darwin") execSync(`open ${url}`);
+          else if (process.platform === "linux") execSync(`xdg-open ${url}`);
+          else if (process.platform === "win32") execSync(`start ${url}`);
+        } catch { /* ignore */ }
+      }, 500);
+    }
+  }
+});
 
 child.on("exit", (code) => process.exit(code || 0));
 process.on("SIGINT", () => { child.kill("SIGINT"); process.exit(0); });
