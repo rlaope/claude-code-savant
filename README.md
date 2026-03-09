@@ -1,6 +1,6 @@
 # claude-code-savant
 
-A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, **Socrates** for error debugging, and **SayNo (세이노)** for business strategy & monetization.
+A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, **Socrates** for error debugging, and **SayNo** for business strategy & monetization.
 
 ![](./assets/savant.png)
 
@@ -234,7 +234,7 @@ The Smart Router will:
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
 | `/savant-fix` | Socrates | Error analysis, root cause debugging |
-| `/savant-biz` | SayNo (세이노) | Business strategy, monetization, P&L analysis |
+| `/savant-biz` | SayNo | Business strategy, monetization, P&L analysis |
 | `/savant-update` | **Update** | Check for updates and upgrade |
 
 ### Direct Agent Calls
@@ -301,7 +301,7 @@ function fibonacci(n) {
 - **Output**: Thorough error analysis with fixes and prevention strategies
 - **Use when**: You have an error, stack trace, or bug to investigate
 
-### The Strategist (SayNo / 세이노)
+### The Strategist (SayNo)
 
 - **Style**: Data-driven, numbers-first analysis
 - **Strength**: Revenue modeling, P&L projections, market sizing
@@ -311,24 +311,11 @@ function fibonacci(n) {
 
 ## Business Domain Agents
 
-SayNo is the gateway to specialized business domain agents. Activate only the ones you need in the Savant Chat sidebar.
+SayNo is the gateway to **14 specialized business domain agents** covering Finance, Growth, Legal, Fashion, Logistics, F&B, SaaS, E-commerce, Real Estate, Healthcare, Content, HR, Education, and Travel.
 
-| Agent | Domain | Specialization |
-|-------|--------|---------------|
-| **Finance PM** | Investment & Finance | Fundraising, valuation, cap tables, financial modeling |
-| **Growth PM** | Marketing & Growth | User acquisition, retention, funnels, A/B testing |
-| **Legal Advisor** | Business Law | Entity formation, contracts, IP, regulatory compliance |
-| **Fashion PM** | Fashion & Retail | Brand positioning, seasonal planning, margin structures |
-| **Logistics Manager** | Supply Chain & Ops | Fulfillment, inventory, delivery, cost optimization |
-| **F&B PM** | Food & Beverage | Food costs, kitchen ops, delivery platforms, menu engineering |
-| **SaaS PM** | Software Business | MRR, churn, pricing tiers, PLG strategy, ARR growth |
+Each agent provides data-driven analysis with Korean market expertise (한국 시장). Activate only the ones you need in the Savant Chat sidebar.
 
-### How It Works
-
-1. **SayNo is always on** — the general business strategist and gateway
-2. **Toggle domain agents** on/off in the Savant Chat sidebar
-3. **Biz Team Chat** — activated business agents discuss your question together
-4. Each agent has deep domain knowledge including Korean market specifics
+> **[Full Business Agents Documentation →](./docs/business-agents.md)** — commands, examples, and detailed descriptions for all 14 domain agents.
 
 ## Savant Chat (Web UI)
 
@@ -411,20 +398,29 @@ claude-code-savant/
 │   ├── shakespeare.md        # Shakespeare persona definition
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   ├── socrates.md           # Socrates persona definition
-│   ├── sayno.md              # SayNo (세이노) business strategy gateway
-│   └── biz/                  # Business domain agents
+│   ├── sayno.md              # SayNo business strategy gateway
+│   └── biz/                  # Business domain agents (14 agents)
 │       ├── finance.md        # Finance PM - Investment & Finance
 │       ├── growth.md         # Growth PM - Marketing & Growth
 │       ├── legal.md          # Legal Advisor - Business Law
 │       ├── fashion.md        # Fashion PM - Fashion & Retail
 │       ├── logistics.md      # Logistics Manager - Supply Chain
 │       ├── fnb.md            # F&B PM - Food & Beverage
-│       └── saas.md           # SaaS PM - Software Business
+│       ├── saas.md           # SaaS PM - Software Business
+│       ├── ecommerce.md      # E-commerce PM - Online Retail
+│       ├── realestate.md     # Real Estate PM - Property & PropTech
+│       ├── healthcare.md     # Healthcare PM - HealthTech & Medical
+│       ├── content.md        # Content PM - Media & Creator Economy
+│       ├── hr.md             # HR PM - People Operations & HRTech
+│       ├── education.md      # Education PM - EdTech & Learning
+│       └── travel.md         # Travel PM - Tourism & Hospitality
 ├── web/
 │   ├── server.ts              # Chat server (Express + Anthropic API)
 │   ├── cli.ts                 # CLI entry point (savant-chat command)
 │   └── public/
 │       └── index.html         # Messenger-style chat UI
+├── docs/
+│   └── business-agents.md    # Full business agents documentation
 ├── commands/
 │   ├── install.md            # Auto-runs on first install
 │   ├── setup.md              # /savant-setup (manual setup wizard)
