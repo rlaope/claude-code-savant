@@ -394,6 +394,19 @@
     .biz-toggle.on::after { transform: translateX(12px); }
     .persona-item .biz-toggle { margin-left: auto; }
 
+    /* Biz modal agent row */
+    .biz-agent-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 10px;
+      margin-bottom: 4px; transition: background 0.12s;
+    }
+    .biz-agent-row:hover { background: #f8f8f8; }
+    .biz-agent-row .desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .biz-agent-row .gateway-badge {
+      font-size: 9px; background: #F39C12; color: white;
+      padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 4px;
+    }
+
     .biz-group-av {
       background: linear-gradient(135deg, #F39C12, #8E44AD, #27AE60, #2C3E50);
     }
@@ -420,6 +433,18 @@
       </div>
       <div class="hint" id="modalHint">
         Or set it in your terminal: <code>export ANTHROPIC_API_KEY=sk-ant-...</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Biz Agent Manager Modal -->
+  <div class="modal-overlay hidden" id="bizModal">
+    <div class="modal" style="max-width:500px;">
+      <h2 id="bizModalTitle">Business Agents</h2>
+      <p id="bizModalDesc">Activate the domain experts you need. SayNo is always on as the gateway.</p>
+      <div id="bizAgentList" style="max-height:400px; overflow-y:auto; margin-bottom:16px;"></div>
+      <div class="btn-row">
+        <button class="primary" onclick="closeBizModal()" style="flex:1;">OK</button>
       </div>
     </div>
   </div>
@@ -666,27 +691,24 @@ function renderPersonaList() {
   // Biz section
   const bizHeaderClass = bizCollapsed ? 'category-header collapsed' : 'category-header';
   const bizItemsClass = bizCollapsed ? 'category-items collapsed' : 'category-items';
+  const bizManageBtn = `<span onclick="event.stopPropagation(); openBizModal()" style="font-size:10px; color:var(--muted); cursor:pointer; padding:2px 6px; border-radius:4px; background:#f0f0f0;">${lang === 'ko' ? '관리' : 'Manage'}</span>`;
   const bizHeader = `<div class="${bizHeaderClass}" onclick="toggleCategory('biz')" style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
-    <span class="label">${t('bizSection')}</span><span class="arrow">▼</span>
+    <span class="label">${t('bizSection')}</span>
+    <span style="display:flex;align-items:center;gap:6px;">${bizManageBtn}<span class="arrow">▼</span></span>
   </div>`;
 
-  const bizItems = bizPersonas.map(p => {
-    const enabled = isBizEnabled(p.id);
-    const isGateway = p.id === 'sayno';
-    const toggleHtml = isGateway ? '' :
-      `<div class="biz-toggle ${enabled ? 'on' : ''}" onclick="event.stopPropagation(); toggleBiz('${p.id}')"></div>`;
-    const itemClass = enabled || isGateway ? '' : 'opacity:0.5;';
-    return `
+  // Only show activated biz agents in sidebar
+  const activeBizPersonas = bizPersonas.filter(p => p.id === 'sayno' || isBizEnabled(p.id));
+  const bizItems = activeBizPersonas.map(p => `
       <div class="persona-item ${activeChat === p.id ? 'active' : ''}"
-           onclick="selectBizChat('${p.id}')" id="chat-${p.id}" style="${itemClass}">
+           onclick="selectChat('${p.id}')" id="chat-${p.id}">
         <div class="avatar" style="background:${p.color}">${p.initial}</div>
         <div class="persona-info">
           <div class="name">${lang === 'ko' ? p.nameKo : p.name}</div>
           <div class="title">${lang === 'ko' ? p.titleKo : p.title}</div>
         </div>
-        ${toggleHtml}
-      </div>`;
-  }).join('');
+      </div>`
+  ).join('');
 
   const activeBiz = getActiveBizIds();
   const bizGroupItem = activeBiz.length >= 2 ? `
@@ -724,23 +746,55 @@ function toggleCategory(cat) {
   renderPersonaList();
 }
 
-function selectBizChat(id) {
-  // Clicking a biz agent always opens it; auto-enable if needed
-  if (!isBizEnabled(id) && id !== 'sayno') {
-    setBizEnabled(id, true);
-  }
-  selectChat(id);
-  renderPersonaList();
-}
-
 function toggleBiz(id) {
   const current = isBizEnabled(id);
   setBizEnabled(id, !current);
-  // If disabling the currently active chat, switch to sayno
   if (current && activeChat === id) {
     selectChat('sayno');
   }
   renderPersonaList();
+}
+
+function openBizModal() {
+  const bizPersonas = personas.filter(p => p.category === 'biz');
+  document.getElementById('bizModalTitle').textContent =
+    lang === 'ko' ? '사업 에이전트 관리' : 'Manage Business Agents';
+  document.getElementById('bizModalDesc').textContent =
+    lang === 'ko' ? '필요한 도메인 전문가를 활성화하세요. 세이노는 게이트웨이로 항상 켜져 있습니다.' : 'Activate the domain experts you need. SayNo is always on as the gateway.';
+
+  const listHtml = bizPersonas.map(p => {
+    const isGateway = p.id === 'sayno';
+    const enabled = isBizEnabled(p.id);
+    const toggleClass = isGateway ? 'biz-toggle on' : `biz-toggle ${enabled ? 'on' : ''}`;
+    const toggleClick = isGateway ? '' : `onclick="toggleBizModal('${p.id}')"`;
+    const gatewayBadge = isGateway ? `<span class="gateway-badge">GATEWAY</span>` : '';
+    return `
+      <div class="biz-agent-row">
+        <div class="avatar" style="background:${p.color}; width:36px; height:36px; font-size:13px;">${p.initial}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600;">${lang === 'ko' ? p.nameKo : p.name} ${gatewayBadge}</div>
+          <div class="desc">${lang === 'ko' ? p.titleKo : p.title}</div>
+        </div>
+        <div class="${toggleClass}" ${toggleClick} style="${isGateway ? 'opacity:0.5;cursor:default;' : ''}"></div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('bizAgentList').innerHTML = listHtml;
+  document.getElementById('bizModal').classList.remove('hidden');
+}
+
+function toggleBizModal(id) {
+  const current = isBizEnabled(id);
+  setBizEnabled(id, !current);
+  if (current && activeChat === id) {
+    selectChat('sayno');
+  }
+  openBizModal(); // re-render modal
+  renderPersonaList();
+}
+
+function closeBizModal() {
+  document.getElementById('bizModal').classList.add('hidden');
 }
 
 function selectChat(id) {
