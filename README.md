@@ -303,6 +303,10 @@ function fibonacci(n) {
 
 A local messenger-style chat interface to talk with AI personas about your project. Each persona understands your project's codebase, architecture, and conventions.
 
+![Savant Chat UI](./assets/webui1.png)
+
+![Savant Chat UI - Chat](./assets/webui2.png)
+
 ### Quick Start
 
 ```bash
