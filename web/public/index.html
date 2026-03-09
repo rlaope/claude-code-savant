@@ -311,7 +311,7 @@
     .context-overlay.show { opacity: 1; pointer-events: auto; }
     .context-panel {
       position: fixed; top: 0; right: -500px; bottom: 0;
-      width: 480px; max-width: 90vw;
+      width: 480px; min-width: 280px; max-width: 90vw;
       background: white;
       box-shadow: -4px 0 20px rgba(0,0,0,0.1);
       z-index: 91;
@@ -319,6 +319,14 @@
       transition: right 0.25s ease;
     }
     .context-panel.show { right: 0; }
+    .context-panel.dragging { transition: none; user-select: none; }
+    .resize-handle {
+      position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
+      cursor: col-resize; z-index: 92;
+    }
+    .resize-handle:hover, .resize-handle:active {
+      background: rgba(0,0,0,0.06);
+    }
     .context-panel-header {
       padding: 16px 20px;
       border-bottom: 1px solid var(--border);
@@ -384,6 +392,7 @@
   <!-- Context Panel -->
   <div class="context-overlay" id="contextOverlay" onclick="closeContext()"></div>
   <div class="context-panel" id="contextPanel">
+    <div class="resize-handle" id="resizeHandle"></div>
     <div class="context-panel-header">
       <h2 id="contextTitle">Project Context</h2>
       <button class="close-btn" onclick="closeContext()">&times;</button>
@@ -411,7 +420,6 @@
         <button class="active" onclick="setLang('en')" id="langEn">EN</button>
         <button onclick="setLang('ko')" id="langKo">KO</button>
       </div>
-      <button onclick="clearChat()">+ <span class="t" data-en="New Chat" data-ko="새 대화">New Chat</span></button>
       <button class="secondary" onclick="showApiKeyModal()"><span class="t" data-en="API Key" data-ko="API 키 설정">API Key</span></button>
     </div>
   </aside>
@@ -621,10 +629,15 @@ function renderMessages() {
   if (history.length === 0) {
     const isGroup = activeChat === 'group';
     const p = isGroup ? null : personas.find(x => x.id === activeChat);
+    const avStyle = isGroup
+      ? 'class="avatar sm group-av"'
+      : `class="avatar sm" style="background:${p?.color||'#666'}"`;
+    const avText = isGroup ? 'All' : (p?.initial || '?');
+    const welcomeText = getWelcomeBubble(activeChat);
     container.innerHTML = `
-      <div class="welcome-msg">
-        <h2>${isGroup ? t('groupName') : (lang === 'ko' ? p?.nameKo : p?.name) || 'Savant'}</h2>
-        <p>${isGroup ? t('welcomeGroup') : t('welcome')}</p>
+      <div class="message-row assistant" style="margin-top:40px;">
+        <div ${avStyle}>${avText}</div>
+        <div class="bubble">${marked.parse(welcomeText, { breaks: true })}</div>
       </div>
     `;
     return;
@@ -651,6 +664,26 @@ function renderMessages() {
 
   container.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
   scrollToBottom();
+}
+
+function getWelcomeBubble(id) {
+  const pName = document.getElementById('projectName').textContent || 'your project';
+  const en = {
+    einstein: `Hi, I'm the Einstein agent. I've been studying the **${pName}** project. Ask me about concepts, architecture, or how anything works — I'll break it down from first principles for you.`,
+    shakespeare: `Greetings! I'm the Shakespeare agent. I've read through the **${pName}** codebase. Share any code with me and I'll analyze its flow, structure, and drama with narrative and flowcharts.`,
+    socrates: `Hello, I'm the Socrates agent. I'm standing by on the **${pName}** project. Got an error, bug, or stack trace? I'll trace it to its root cause through systematic investigation.`,
+    stevejobs: `Hey. I'm the Steve Jobs agent. I've looked at **${pName}** closely. Tell me what you're building or where you're stuck — I'll give you bold, honest direction on what matters most.`,
+    group: `Welcome to the Team Chat for **${pName}**! All 4 personas — Einstein, Shakespeare, Socrates, and Steve Jobs — will discuss your question together and give you a synthesized consensus.`,
+  };
+  const ko = {
+    einstein: `안녕하세요, 아인슈타인 에이전트입니다. **${pName}** 프로젝트를 분석 완료했습니다. 개념, 아키텍처, 동작 원리에 대해 질문해주세요 — 기초 원리부터 명쾌하게 설명해드리겠습니다.`,
+    shakespeare: `반갑습니다! 셰익스피어 에이전트입니다. **${pName}** 코드베이스를 파악하고 있습니다. 코드를 보여주시면 흐름과 구조를 이야기와 플로차트로 분석해드릴게요.`,
+    socrates: `안녕하세요, 소크라테스 에이전트입니다. **${pName}** 프로젝트에 대기 중입니다. 에러, 버그, 스택 트레이스가 있으신가요? 근본 원인까지 체계적으로 추적해드리겠습니다.`,
+    stevejobs: `안녕하세요. 스티브 잡스 에이전트입니다. **${pName}** 프로젝트를 살펴봤습니다. 지금 만들고 있는 것이나 고민을 말씀해주세요 — 정말 중요한 것이 무엇인지 방향을 제시해드리겠습니다.`,
+    group: `**${pName}** 단톡방에 오신 걸 환영합니다! 아인슈타인, 셰익스피어, 소크라테스, 스티브 잡스 4명의 에이전트가 함께 질문에 답하고 의견을 종합해드립니다.`,
+  };
+  const texts = lang === 'ko' ? ko : en;
+  return texts[id] || texts.einstein;
 }
 
 function escapeHtml(text) {
@@ -824,6 +857,33 @@ function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
+
+// ── Context Panel Resize ─────────
+(function initResize() {
+  const handle = document.getElementById('resizeHandle');
+  const panel = document.getElementById('contextPanel');
+  let startX = 0, startW = 0;
+
+  handle.addEventListener('mousedown', (e) => {
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    panel.classList.add('dragging');
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', onStop);
+    e.preventDefault();
+  });
+
+  function onDrag(e) {
+    const diff = startX - e.clientX;
+    const newW = Math.max(280, Math.min(window.innerWidth * 0.9, startW + diff));
+    panel.style.width = newW + 'px';
+  }
+  function onStop() {
+    panel.classList.remove('dragging');
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', onStop);
+  }
+})();
 
 // ── Context Panel ────────────────
 let contextLoaded = false;

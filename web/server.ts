@@ -412,7 +412,22 @@ app.post("/api/chat/group", async (req, res) => {
   await streamChat(req, res, buildGroupSystemPrompt(lang), messages, provider);
 });
 
-const PORT = process.env.PORT || 3456;
-app.listen(PORT, () => {
-  console.log(`  Savant Chat -> http://localhost:${PORT}\n`);
+async function findAvailablePort(start: number): Promise<number> {
+  const net = await import("net");
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(start, () => {
+      server.close(() => resolve(start));
+    });
+    server.on("error", () => {
+      resolve(findAvailablePort(start + 1));
+    });
+  });
+}
+
+const preferredPort = parseInt(process.env.PORT || "3456", 10);
+findAvailablePort(preferredPort).then((port) => {
+  app.listen(port, () => {
+    console.log(`  Savant Chat -> http://localhost:${port}\n`);
+  });
 });
