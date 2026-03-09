@@ -334,9 +334,11 @@ SayNo is the gateway to specialized business domain agents. Activate only the on
 
 A local messenger-style chat interface to talk with AI personas about your project. Each persona understands your project's codebase, architecture, and conventions.
 
-![Savant Chat UI](./assets/webui1.png)
+![Savant Chat UI](./assets/webui3.png)
 
-![Savant Chat UI - Chat](./assets/webui2.png)
+![Savant Chat - Biz Agents](./assets/webui4.png)
+
+![Savant Chat - Agent Manager](./assets/webui5.png)
 
 ### Quick Start
 
