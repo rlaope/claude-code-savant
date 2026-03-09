@@ -299,6 +299,69 @@ function fibonacci(n) {
 - **Output**: Thorough error analysis with fixes and prevention strategies
 - **Use when**: You have an error, stack trace, or bug to investigate
 
+## Savant Chat (Web UI)
+
+A local messenger-style chat interface to talk with AI personas about your project. Each persona understands your project's codebase, architecture, and conventions.
+
+### Quick Start
+
+```bash
+# From the plugin directory
+npm run chat
+
+# Or install globally
+npm install -g claude-code-savant
+savant-chat
+
+# Or use npx (no install needed)
+npx claude-code-savant
+```
+
+### From Any Project
+
+```bash
+# Navigate to your project, then:
+savant-chat
+
+# Or specify a port
+savant-chat --port 4000
+```
+
+The chat server automatically scans your project directory (package.json, README, source files, git history) and gives all personas full context.
+
+### From Claude Code
+
+```bash
+/savant-chat
+```
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **1:1 Chat** | Chat with Einstein, Shakespeare, Socrates, or Steve Jobs individually |
+| **Team Chat** | All 4 personas discuss your question together (단톡방) |
+| **Language Toggle** | Switch between English and Korean (EN/KO) |
+| **Project Context** | Click the project badge to see what the AI knows |
+| **API Key Setup** | Built-in UI for setting your Anthropic API key |
+| **Streaming** | Real-time streaming responses |
+
+### Screenshots
+
+Open `http://localhost:3456` after launching:
+
+- **Left sidebar**: Persona selection + Team Chat + Language toggle
+- **Main area**: Messenger-style chat with markdown rendering
+- **Project badge**: Click to see full project context the AI understands
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Your Anthropic API key | _(required)_ |
+| `PROJECT_DIR` | Project directory to scan | Current directory |
+| `PORT` | Server port | `3456` |
+
 ## Project Structure
 
 ```
@@ -311,6 +374,11 @@ claude-code-savant/
 │   ├── shakespeare.md        # Shakespeare persona definition
 │   ├── stevejobs.md          # Steve Jobs persona definition
 │   └── socrates.md           # Socrates persona definition
+├── web/
+│   ├── server.ts              # Chat server (Express + Anthropic API)
+│   ├── cli.ts                 # CLI entry point (savant-chat command)
+│   └── public/
+│       └── index.html         # Messenger-style chat UI
 ├── commands/
 │   ├── install.md            # Auto-runs on first install
 │   ├── setup.md              # /savant-setup (manual setup wizard)

@@ -4,11 +4,16 @@
   "description": "MCP server providing expert code explanations through Shakespeare and Einstein personas",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "savant-chat": "./web/dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
-    "test": "vitest"
+    "test": "vitest",
+    "chat": "cd web && npx tsc && node dist/server.js",
+    "chat:here": "cd web && npx tsc && PROJECT_DIR=$(pwd) node dist/server.js"
   },
   "keywords": [
     "mcp",
@@ -19,10 +24,15 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.10.0",
     "typescript": "^5.3.0",
     "vitest": "^1.0.0"
