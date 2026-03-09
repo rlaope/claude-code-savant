@@ -394,17 +394,34 @@
     .biz-toggle.on::after { transform: translateX(12px); }
     .persona-item .biz-toggle { margin-left: auto; }
 
-    /* Biz modal agent row */
-    .biz-agent-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; border-radius: 10px;
-      margin-bottom: 4px; transition: background 0.12s;
+    /* Biz modal chip grid */
+    .biz-chip-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
     }
-    .biz-agent-row:hover { background: #f8f8f8; }
-    .biz-agent-row .desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .biz-agent-row .gateway-badge {
-      font-size: 9px; background: #F39C12; color: white;
-      padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 4px;
+    .biz-chip {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 14px 8px; border-radius: 12px;
+      cursor: pointer; transition: all 0.15s;
+      border: 2px solid transparent;
+      text-align: center;
+    }
+    .biz-chip.active { border-color: currentColor; }
+    .biz-chip.inactive {
+      background: #f5f5f5; opacity: 0.5;
+      filter: grayscale(1);
+    }
+    .biz-chip .chip-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: white; margin-bottom: 6px;
+    }
+    .biz-chip .chip-name { font-size: 11px; font-weight: 600; }
+    .biz-chip .chip-desc { font-size: 9px; color: var(--muted); margin-top: 2px; }
+    .biz-chip .gateway-badge {
+      font-size: 8px; background: #F39C12; color: white;
+      padding: 1px 5px; border-radius: 3px; font-weight: 600; margin-top: 4px;
     }
 
     .biz-group-av {
@@ -762,24 +779,24 @@ function openBizModal() {
   document.getElementById('bizModalDesc').textContent =
     lang === 'ko' ? '필요한 도메인 전문가를 활성화하세요. 세이노는 게이트웨이로 항상 켜져 있습니다.' : 'Activate the domain experts you need. SayNo is always on as the gateway.';
 
-  const listHtml = bizPersonas.map(p => {
+  const chipsHtml = bizPersonas.map(p => {
     const isGateway = p.id === 'sayno';
     const enabled = isBizEnabled(p.id);
-    const toggleClass = isGateway ? 'biz-toggle on' : `biz-toggle ${enabled ? 'on' : ''}`;
-    const toggleClick = isGateway ? '' : `onclick="toggleBizModal('${p.id}')"`;
+    const chipClass = (enabled || isGateway) ? 'biz-chip active' : 'biz-chip inactive';
+    const clickAction = isGateway ? '' : `onclick="toggleBizModal('${p.id}')"`;
     const gatewayBadge = isGateway ? `<span class="gateway-badge">GATEWAY</span>` : '';
+    const name = lang === 'ko' ? p.nameKo : p.name;
+    const desc = lang === 'ko' ? p.titleKo : p.title;
     return `
-      <div class="biz-agent-row">
-        <div class="avatar" style="background:${p.color}; width:36px; height:36px; font-size:13px;">${p.initial}</div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:600;">${lang === 'ko' ? p.nameKo : p.name} ${gatewayBadge}</div>
-          <div class="desc">${lang === 'ko' ? p.titleKo : p.title}</div>
-        </div>
-        <div class="${toggleClass}" ${toggleClick} style="${isGateway ? 'opacity:0.5;cursor:default;' : ''}"></div>
+      <div class="${chipClass}" ${clickAction} style="${isGateway ? 'cursor:default;' : ''}">
+        <div class="chip-avatar" style="background:${p.color}">${p.initial}</div>
+        <div class="chip-name">${name}</div>
+        <div class="chip-desc">${desc}</div>
+        ${gatewayBadge}
       </div>`;
   }).join('');
 
-  document.getElementById('bizAgentList').innerHTML = listHtml;
+  document.getElementById('bizAgentList').innerHTML = `<div class="biz-chip-grid">${chipsHtml}</div>`;
   document.getElementById('bizModal').classList.remove('hidden');
 }
 
