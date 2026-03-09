@@ -394,26 +394,33 @@ claude-code-savant/
 │   └── plugin.json           # Plugin manifest
 ├── agents/
 │   ├── router.md             # Smart Router (question analyzer)
-│   ├── einstein.md           # Einstein persona definition
-│   ├── shakespeare.md        # Shakespeare persona definition
-│   ├── stevejobs.md          # Steve Jobs persona definition
-│   ├── socrates.md           # Socrates persona definition
-│   ├── sayno.md              # SayNo business strategy gateway
+│   ├── dev/                  # Dev personas (5 agents)
+│   │   ├── einstein/
+│   │   │   ├── persona.md    # Identity, How You Think, Language Style
+│   │   │   ├── templates.md  # Response structure templates
+│   │   │   └── examples.md   # Before/after response examples
+│   │   ├── shakespeare/      # (same structure)
+│   │   ├── socrates/         # (same structure)
+│   │   ├── stevejobs/        # (same structure)
+│   │   └── sayno/            # (same structure)
 │   └── biz/                  # Business domain agents (14 agents)
-│       ├── finance.md        # Finance PM - Investment & Finance
-│       ├── growth.md         # Growth PM - Marketing & Growth
-│       ├── legal.md          # Legal Advisor - Business Law
-│       ├── fashion.md        # Fashion PM - Fashion & Retail
-│       ├── logistics.md      # Logistics Manager - Supply Chain
-│       ├── fnb.md            # F&B PM - Food & Beverage
-│       ├── saas.md           # SaaS PM - Software Business
-│       ├── ecommerce.md      # E-commerce PM - Online Retail
-│       ├── realestate.md     # Real Estate PM - Property & PropTech
-│       ├── healthcare.md     # Healthcare PM - HealthTech & Medical
-│       ├── content.md        # Content PM - Media & Creator Economy
-│       ├── hr.md             # HR PM - People Operations & HRTech
-│       ├── education.md      # Education PM - EdTech & Learning
-│       └── travel.md         # Travel PM - Tourism & Hospitality
+│       ├── finance/
+│       │   ├── persona.md    # Domain expertise + Korean market
+│       │   ├── benchmarks.md # Industry KPIs and benchmarks
+│       │   └── templates.md  # Response framework templates
+│       ├── saas/             # (same structure)
+│       ├── growth/           # (same structure)
+│       ├── ecommerce/        # (same structure)
+│       ├── legal/            # (same structure)
+│       ├── fashion/          # (same structure)
+│       ├── logistics/        # (same structure)
+│       ├── fnb/              # (same structure)
+│       ├── realestate/       # (same structure)
+│       ├── healthcare/       # (same structure)
+│       ├── content/          # (same structure)
+│       ├── hr/               # (same structure)
+│       ├── education/        # (same structure)
+│       └── travel/           # (same structure)
 ├── web/
 │   ├── server.ts              # Chat server (Express + Anthropic API)
 │   ├── cli.ts                 # CLI entry point (savant-chat command)

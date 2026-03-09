@@ -172,22 +172,44 @@ function loadPersonaFromFile(filePath: string): string | null {
   return content.replace(/^---[\s\S]*?---\n*/, "");
 }
 
+function loadPersonaFromDir(dirOrFile: string): string | null {
+  // If it's a file (e.g., router.md), load directly
+  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isFile()) {
+    return loadPersonaFromFile(dirOrFile);
+  }
+
+  // If it's a directory, load all .md files in order
+  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isDirectory()) {
+    const order = ['persona.md', 'templates.md', 'examples.md', 'benchmarks.md'];
+    const parts: string[] = [];
+
+    for (const filename of order) {
+      const filePath = path.join(dirOrFile, filename);
+      const content = loadPersonaFromFile(filePath);
+      if (content) parts.push(content);
+    }
+
+    return parts.length > 0 ? parts.join('\n\n---\n\n') : null;
+  }
+
+  return null;
+}
+
 function loadPersonas(): Map<string, PersonaInfo> {
   const result = new Map<string, PersonaInfo>();
 
-  // Dev agents from agents/
+  // Dev agents from agents/dev/{id}/
   for (const [id, info] of Object.entries(DEV_META)) {
-    const prompt = loadPersonaFromFile(path.join(PERSONAS_DIR, `${id}.md`));
+    const prompt = loadPersonaFromDir(path.join(PERSONAS_DIR, "dev", id));
     if (prompt) result.set(id, { id, ...info, category: "dev", systemPrompt: prompt });
   }
 
-  // Biz agents: sayno from agents/, rest from agents/biz/
-  const BIZ_DIR = path.join(PERSONAS_DIR, "biz");
+  // Biz agents from agents/biz/{id}/ (sayno is now under agents/dev/sayno/)
   for (const [id, info] of Object.entries(BIZ_META)) {
-    const filePath = id === "sayno"
-      ? path.join(PERSONAS_DIR, `${id}.md`)
-      : path.join(BIZ_DIR, `${id}.md`);
-    const prompt = loadPersonaFromFile(filePath);
+    const dirPath = id === "sayno"
+      ? path.join(PERSONAS_DIR, "dev", id)
+      : path.join(PERSONAS_DIR, "biz", id);
+    const prompt = loadPersonaFromDir(dirPath);
     if (prompt) result.set(id, { id, ...info, category: "biz", systemPrompt: prompt });
   }
 
