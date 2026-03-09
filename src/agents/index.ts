@@ -3,6 +3,7 @@ export { createEinsteinAgent, EinsteinContext } from "./einstein.js";
 export { createShakespeareAgent, ShakespeareContext } from "./shakespeare.js";
 export { createSteveJobsAgent, SteveJobsContext } from "./stevejobs.js";
 export { createSocratesAgent, SocratesContext } from "./socrates.js";
+export { createSayNoAgent, SayNoContext } from "./sayno.js";
 export { AgentConfig, BaseContext } from "./types.js";
 
 /**
@@ -30,5 +31,11 @@ export { AgentConfig, BaseContext } from "./types.js";
  *   language: "jp",
  *   errorType: "null",
  *   includeEdgeCases: true
+ * });
+ *
+ * const sayno = createSayNoAgent({
+ *   language: "kr",
+ *   analysisDepth: "deep",
+ *   focusArea: "monetization"
  * });
  */

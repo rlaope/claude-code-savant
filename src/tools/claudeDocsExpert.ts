@@ -14,10 +14,10 @@ const inputSchema = z.object({
     .describe("The instruction or question about the code"),
   code: z.string().min(1).describe("The code to analyze"),
   persona: z
-    .enum(["shakespeare", "einstein"])
+    .enum(["shakespeare", "einstein", "stevejobs", "socrates", "sayno"])
     .optional()
     .describe(
-      "The persona to use for analysis. If omitted, automatically selected based on instruction: 'shakespeare' for narrative/flowcharts, 'einstein' for performance/complexity"
+      "The persona to use for analysis. If omitted, automatically selected based on instruction: 'shakespeare' for narrative/flowcharts, 'einstein' for performance/complexity, 'stevejobs' for vision/direction, 'socrates' for debugging/errors, 'sayno' for business/monetization"
     ),
 });
 
@@ -27,7 +27,7 @@ const inputSchema = z.object({
 export function registerClaudeDocsExpertTool(server: McpServer): void {
   server.tool(
     "claude_docs_expert",
-    "Analyzes code and provides expert explanations through distinctive personas. Shakespeare offers dramatic narrative with flowcharts, while Einstein provides first principles analysis with complexity metrics.",
+    "Analyzes code and provides expert explanations through 5 distinctive personas. Shakespeare (narrative/flowcharts), Einstein (first principles/complexity), Steve Jobs (vision/simplification), Socrates (debugging/root cause), SayNo (business/monetization).",
     inputSchema.shape,
     async (args) => {
       try {

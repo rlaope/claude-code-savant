@@ -24,7 +24,7 @@ const inputSchema = z.object({
 export function registerConsensusTool(server: McpServer): void {
   server.tool(
     "savant_consensus",
-    "Initiates a team discussion where all 4 genius personas (Shakespeare, Einstein, Socrates, Steve Jobs) analyze the code simultaneously and synthesize their insights into a unified consensus. Perfect for important architectural decisions, code reviews, and when you need multiple perspectives.",
+    "Initiates a team discussion where all 5 genius personas (Shakespeare, Einstein, Socrates, Steve Jobs, SayNo) analyze the code simultaneously and synthesize their insights into a unified consensus. Perfect for important architectural decisions, code reviews, business viability, and when you need multiple perspectives.",
     inputSchema.shape,
     async (args) => {
       try {

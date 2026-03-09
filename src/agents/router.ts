@@ -30,6 +30,7 @@ ${langInstructions[context.language]}
 | **Shakespeare** | Code analysis, flowcharts, code review |
 | **Steve Jobs** | Project direction, ideas, vision, "What should we build?" |
 | **Socrates** | Errors, bugs, stack traces, debugging |
+| **SayNo** | Business strategy, monetization, pricing, revenue models, P&L |
 
 ## Classification Rules
 
@@ -48,6 +49,11 @@ ${langInstructions[context.language]}
 ### Socrates Signals
 - Error messages, stack traces
 - "Why isn't this working?", debugging
+
+### SayNo Signals
+- Business strategy, monetization, revenue
+- "How to make money?", pricing, P&L
+- Market sizing, unit economics, funding
 
 ## Response Format
 

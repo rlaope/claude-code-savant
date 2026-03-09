@@ -121,7 +121,8 @@ describe("Persona Factory", () => {
     expect(personas).toContain("einstein");
     expect(personas).toContain("stevejobs");
     expect(personas).toContain("socrates");
-    expect(personas.length).toBe(4);
+    expect(personas).toContain("sayno");
+    expect(personas.length).toBe(5);
   });
 
   it("should return stevejobs persona", () => {

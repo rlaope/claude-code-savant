@@ -3,14 +3,16 @@ import { ShakespearePersona } from "./shakespeare.js";
 import { EinsteinPersona } from "./einstein.js";
 import { SteveJobsPersona } from "./stevejobs.js";
 import { SocratesPersona } from "./socrates.js";
+import { SayNoPersona } from "./sayno.js";
 
-export type PersonaType = "shakespeare" | "einstein" | "stevejobs" | "socrates";
+export type PersonaType = "shakespeare" | "einstein" | "stevejobs" | "socrates" | "sayno";
 
 const personas = new Map<PersonaType, Persona>();
 personas.set("shakespeare", new ShakespearePersona());
 personas.set("einstein", new EinsteinPersona());
 personas.set("stevejobs", new SteveJobsPersona());
 personas.set("socrates", new SocratesPersona());
+personas.set("sayno", new SayNoPersona());
 
 /**
  * Get a persona by type
