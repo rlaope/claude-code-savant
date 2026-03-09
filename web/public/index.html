@@ -397,7 +397,7 @@
     /* Biz modal chip grid */
     .biz-chip-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
     }
     .biz-chip {
@@ -926,6 +926,13 @@ function getWelcomeBubble(id) {
     logistics: `Hello, I'm the Logistics Manager. I handle supply chain and operations analysis. Ask about fulfillment, inventory, delivery strategy, or cost optimization for **${pName}**.`,
     fnb: `Hi, I'm the F&B PM. I specialize in food & beverage business. Ask about food costs, kitchen ops, delivery platform strategy, or menu engineering for **${pName}**.`,
     saas: `Hello, I'm the SaaS PM. I focus on software business metrics. Ask about MRR, churn, pricing tiers, PLG strategy, or ARR growth modeling for **${pName}**.`,
+    ecommerce: `Hi, I'm the E-commerce PM. I specialize in online retail strategy. Ask about conversion funnels, AOV optimization, platform selection, or marketplace strategy for **${pName}**.`,
+    realestate: `Hello, I'm the Real Estate PM. I handle property investment and PropTech analysis. Ask about cap rates, rental yields, market cycles, or PropTech business models for **${pName}**.`,
+    healthcare: `Hi, I'm the Healthcare PM. I specialize in HealthTech and digital health strategy. Ask about regulatory pathways, reimbursement models, or clinical validation for **${pName}**.`,
+    content: `Hello, I'm the Content PM. I focus on media and creator economy strategy. Ask about content monetization, audience growth, platform strategy, or creator economics for **${pName}**.`,
+    hr: `Hi, I'm the HR PM. I specialize in people operations and hiring. Ask about compensation benchmarks, hiring funnels, org design, or headcount planning for **${pName}**.`,
+    education: `Hello, I'm the Education PM. I focus on EdTech and learning business. Ask about course economics, institutional sales, learner engagement, or EdTech models for **${pName}**.`,
+    travel: `Hi, I'm the Travel PM. I specialize in tourism and hospitality. Ask about revenue management, OTA strategy, seasonal pricing, or travel platform economics for **${pName}**.`,
     group: `Welcome to the Dev Team Chat for **${pName}**! Einstein, Shakespeare, Socrates, and Steve Jobs will discuss your question together.`,
     'biz-group': `Welcome to the Biz Team Chat for **${pName}**! Your active business agents will discuss your question together and synthesize strategic insights.`,
   };
@@ -942,6 +949,13 @@ function getWelcomeBubble(id) {
     logistics: `안녕하세요, 물류 매니저입니다. 공급망과 운영 분석을 담당합니다. **${pName}**의 풀필먼트, 재고, 배송 전략, 비용 최적화를 물어보세요.`,
     fnb: `안녕하세요, F&B PM입니다. 요식업 사업 전문입니다. **${pName}**의 원가율, 주방 운영, 배달 플랫폼 전략, 메뉴 엔지니어링을 물어보세요.`,
     saas: `안녕하세요, SaaS PM입니다. 소프트웨어 비즈니스 지표 전문입니다. **${pName}**의 MRR, 이탈률, 가격 정책, PLG 전략, ARR 성장 모델링을 물어보세요.`,
+    ecommerce: `안녕하세요, 이커머스 PM입니다. 온라인 유통 전략 전문입니다. **${pName}**의 전환율, 객단가, 플랫폼 선택, 마켓플레이스 전략을 물어보세요.`,
+    realestate: `안녕하세요, 부동산 PM입니다. 부동산 투자 및 프롭테크 분석 전문입니다. **${pName}**의 수익률, 임대 수익, 시장 사이클, 프롭테크 모델을 물어보세요.`,
+    healthcare: `안녕하세요, 헬스케어 PM입니다. 디지털 헬스 전략 전문입니다. **${pName}**의 인허가, 수가 체계, 임상 검증에 대해 물어보세요.`,
+    content: `안녕하세요, 콘텐츠 PM입니다. 미디어 및 크리에이터 이코노미 전문입니다. **${pName}**의 콘텐츠 수익화, 오디언스 성장, 플랫폼 전략을 물어보세요.`,
+    hr: `안녕하세요, HR PM입니다. 인사 운영 및 채용 전략 전문입니다. **${pName}**의 연봉 벤치마크, 채용 퍼널, 조직 설계, 인력 계획을 물어보세요.`,
+    education: `안녕하세요, 교육 PM입니다. 에듀테크 및 러닝 비즈니스 전문입니다. **${pName}**의 강의 수익 모델, 학습자 확보, 기관 영업에 대해 물어보세요.`,
+    travel: `안녕하세요, 여행 PM입니다. 관광 및 숙박업 전문입니다. **${pName}**의 레비뉴 매니지먼트, OTA 전략, 시즌별 가격 정책을 물어보세요.`,
     group: `**${pName}** 개발 단톡방에 오신 걸 환영합니다! 아인슈타인, 셰익스피어, 소크라테스, 스티브 잡스가 함께 질문에 답하고 의견을 종합해드립니다.`,
     'biz-group': `**${pName}** 사업 단톡방에 오신 걸 환영합니다! 활성화된 사업 에이전트들이 함께 전략적 인사이트를 종합해드립니다.`,
   };

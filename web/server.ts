@@ -157,6 +157,13 @@ const BIZ_META: Record<string, PersonaMeta> = {
   logistics: { name: "Logistics Manager", nameKo: "물류 매니저",  title: "Supply Chain & Ops",   titleKo: "물류/SCM 에이전트",  initial: "Lo", color: "#795548" },
   fnb:       { name: "F&B PM",           nameKo: "F&B PM",       title: "Food & Beverage",      titleKo: "요식업 에이전트",    initial: "Fb", color: "#FF5722" },
   saas:      { name: "SaaS PM",          nameKo: "SaaS PM",      title: "Software Business",    titleKo: "SaaS/플랫폼 에이전트", initial: "Sa", color: "#3F51B5" },
+  ecommerce: { name: "E-commerce PM",   nameKo: "이커머스 PM",  title: "Online Retail",        titleKo: "이커머스 에이전트",   initial: "Ec", color: "#FF9800" },
+  realestate:{ name: "Real Estate PM",  nameKo: "부동산 PM",    title: "Property & PropTech",   titleKo: "부동산 에이전트",     initial: "Re", color: "#607D8B" },
+  healthcare:{ name: "Healthcare PM",   nameKo: "헬스케어 PM",  title: "HealthTech",           titleKo: "헬스케어 에이전트",   initial: "He", color: "#4CAF50" },
+  content:   { name: "Content PM",      nameKo: "콘텐츠 PM",    title: "Media & Creator",      titleKo: "콘텐츠/미디어 에이전트", initial: "Co", color: "#9C27B0" },
+  hr:        { name: "HR PM",           nameKo: "HR PM",        title: "People & HRTech",      titleKo: "인사/채용 에이전트",  initial: "Hr", color: "#009688" },
+  education: { name: "Education PM",    nameKo: "교육 PM",      title: "EdTech & Learning",    titleKo: "교육/에듀테크 에이전트", initial: "Ed", color: "#673AB7" },
+  travel:    { name: "Travel PM",       nameKo: "여행 PM",      title: "Tourism & Hospitality", titleKo: "여행/관광 에이전트",  initial: "Tr", color: "#00BCD4" },
 };
 
 function loadPersonaFromFile(filePath: string): string | null {
