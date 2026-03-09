@@ -22,6 +22,8 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 const PERSONAS_DIR = path.join(SAVANT_ROOT, "agents");
 const PROJECT_DIR = process.env.PROJECT_DIR || process.cwd();
 
+type PersonaCategory = "dev" | "biz";
+
 interface PersonaInfo {
   id: string;
   name: string;
@@ -30,8 +32,11 @@ interface PersonaInfo {
   titleKo: string;
   initial: string;
   color: string;
+  category: PersonaCategory;
   systemPrompt: string;
 }
+
+type PersonaMeta = { name: string; nameKo: string; title: string; titleKo: string; initial: string; color: string };
 
 // ── Project Scanner ──────────────────────────────────────────────
 function scanProject(dir: string): string {
@@ -136,24 +141,50 @@ function collectFiles(dir: string, maxDepth: number, depth = 0): string[] {
 }
 
 // ── Persona Loader ───────────────────────────────────────────────
-function loadPersonas(): Map<string, PersonaInfo> {
-  const personas = new Map<string, PersonaInfo>();
-  const meta: Record<string, { name: string; nameKo: string; title: string; titleKo: string; initial: string; color: string }> = {
-    einstein:    { name: "Einstein",    nameKo: "아인슈타인", title: "The Professor",  titleKo: "개념 정리 에이전트",     initial: "E", color: "#6C5CE7" },
-    shakespeare: { name: "Shakespeare", nameKo: "셰익스피어", title: "The Bard",       titleKo: "코드 분석 에이전트",     initial: "S", color: "#E17055" },
-    socrates:    { name: "Socrates",    nameKo: "소크라테스",  title: "The Debugger",   titleKo: "디버깅 에이전트",        initial: "So", color: "#00B894" },
-    stevejobs:   { name: "Steve Jobs",  nameKo: "스티브 잡스", title: "The Visionary",  titleKo: "방향 제시 에이전트",     initial: "J", color: "#0984E3" },
-  };
+const DEV_META: Record<string, PersonaMeta> = {
+  einstein:    { name: "Einstein",    nameKo: "아인슈타인", title: "The Professor",  titleKo: "개념 정리 에이전트",     initial: "E", color: "#6C5CE7" },
+  shakespeare: { name: "Shakespeare", nameKo: "셰익스피어", title: "The Bard",       titleKo: "코드 분석 에이전트",     initial: "S", color: "#E17055" },
+  socrates:    { name: "Socrates",    nameKo: "소크라테스",  title: "The Debugger",   titleKo: "디버깅 에이전트",        initial: "So", color: "#00B894" },
+  stevejobs:   { name: "Steve Jobs",  nameKo: "스티브 잡스", title: "The Visionary",  titleKo: "방향 제시 에이전트",     initial: "J", color: "#0984E3" },
+};
 
-  for (const [id, info] of Object.entries(meta)) {
-    const filePath = path.join(PERSONAS_DIR, `${id}.md`);
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf-8");
-      const stripped = content.replace(/^---[\s\S]*?---\n*/, "");
-      personas.set(id, { id, ...info, systemPrompt: stripped });
-    }
+const BIZ_META: Record<string, PersonaMeta> = {
+  sayno:     { name: "SayNo",            nameKo: "세이노",       title: "The Strategist",  titleKo: "사업/수익화 에이전트",  initial: "₩", color: "#F39C12" },
+  finance:   { name: "Finance PM",       nameKo: "파이낸스 PM",  title: "Investment & Finance", titleKo: "재무/투자 에이전트", initial: "F", color: "#8E44AD" },
+  growth:    { name: "Growth PM",        nameKo: "그로스 PM",    title: "Marketing & Growth",   titleKo: "마케팅/그로스 에이전트", initial: "G", color: "#27AE60" },
+  legal:     { name: "Legal Advisor",    nameKo: "법률 어드바이저", title: "Business Law",     titleKo: "법률/규제 에이전트",  initial: "L", color: "#2C3E50" },
+  fashion:   { name: "Fashion PM",       nameKo: "패션 PM",      title: "Fashion & Retail",     titleKo: "패션 사업 에이전트", initial: "Fa", color: "#E91E63" },
+  logistics: { name: "Logistics Manager", nameKo: "물류 매니저",  title: "Supply Chain & Ops",   titleKo: "물류/SCM 에이전트",  initial: "Lo", color: "#795548" },
+  fnb:       { name: "F&B PM",           nameKo: "F&B PM",       title: "Food & Beverage",      titleKo: "요식업 에이전트",    initial: "Fb", color: "#FF5722" },
+  saas:      { name: "SaaS PM",          nameKo: "SaaS PM",      title: "Software Business",    titleKo: "SaaS/플랫폼 에이전트", initial: "Sa", color: "#3F51B5" },
+};
+
+function loadPersonaFromFile(filePath: string): string | null {
+  if (!fs.existsSync(filePath)) return null;
+  const content = fs.readFileSync(filePath, "utf-8");
+  return content.replace(/^---[\s\S]*?---\n*/, "");
+}
+
+function loadPersonas(): Map<string, PersonaInfo> {
+  const result = new Map<string, PersonaInfo>();
+
+  // Dev agents from agents/
+  for (const [id, info] of Object.entries(DEV_META)) {
+    const prompt = loadPersonaFromFile(path.join(PERSONAS_DIR, `${id}.md`));
+    if (prompt) result.set(id, { id, ...info, category: "dev", systemPrompt: prompt });
   }
-  return personas;
+
+  // Biz agents: sayno from agents/, rest from agents/biz/
+  const BIZ_DIR = path.join(PERSONAS_DIR, "biz");
+  for (const [id, info] of Object.entries(BIZ_META)) {
+    const filePath = id === "sayno"
+      ? path.join(PERSONAS_DIR, `${id}.md`)
+      : path.join(BIZ_DIR, `${id}.md`);
+    const prompt = loadPersonaFromFile(filePath);
+    if (prompt) result.set(id, { id, ...info, category: "biz", systemPrompt: prompt });
+  }
+
+  return result;
 }
 
 const personas = loadPersonas();
@@ -219,33 +250,43 @@ ${langInstruction}
 ${projectContext}`;
 }
 
-function buildGroupSystemPrompt(lang: string): string {
-  const personaList = Array.from(personas.values());
+function buildGroupSystemPrompt(lang: string, category: PersonaCategory = "dev", activeIds?: string[]): string {
+  let personaList: PersonaInfo[];
+
+  if (category === "biz" && activeIds && activeIds.length > 0) {
+    personaList = activeIds.map(id => personas.get(id)).filter((p): p is PersonaInfo => !!p);
+  } else {
+    personaList = Array.from(personas.values()).filter(p => p.category === category);
+  }
+
+  const count = personaList.length;
   const personaDescriptions = personaList.map(p =>
     `- **${p.name}** (${p.title}): ${p.systemPrompt.split("\n").slice(0, 3).join(" ").slice(0, 200)}`
   ).join("\n");
+
+  const responseFormat = personaList.map(p =>
+    `**${p.name}**: [${p.name}'s response in character]`
+  ).join("\n\n");
 
   const langInstruction = lang === "ko"
     ? "IMPORTANT: You MUST respond in Korean (한국어). 각 페르소나의 이름은 영어로 유지하되 대화 내용은 모두 한국어로."
     : "IMPORTANT: Respond in English.";
 
-  return `You are simulating a group discussion between 4 genius personas. When the user asks a question, ALL 4 personas respond with their unique perspective. Each persona stays in character.
+  const topicFocus = category === "biz"
+    ? "Focus on business strategy, monetization, market analysis, and financial viability."
+    : "Be specific about the project's actual code and architecture.";
+
+  return `You are simulating a group discussion between ${count} expert personas. When the user asks a question, ALL ${count} personas respond with their unique perspective. Each persona stays in character.
 
 ## The Personas
 ${personaDescriptions}
 
 ## Response Format
-Always respond with ALL 4 personas giving their take. Use this exact format:
+Always respond with ALL ${count} personas giving their take. Use this exact format:
 
-**Einstein**: [Einstein's response in character - first principles, scientific]
+${responseFormat}
 
-**Shakespeare**: [Shakespeare's response in character - narrative, dramatic]
-
-**Socrates**: [Socrates's response in character - questioning, investigative]
-
-**Steve Jobs**: [Steve Jobs's response in character - bold, visionary]
-
-After all 4 respond, add a brief synthesis:
+After all ${count} respond, add a brief synthesis:
 
 **Consensus**: [1-2 sentences summarizing where they agree and the key takeaway]
 
@@ -254,7 +295,7 @@ After all 4 respond, add a brief synthesis:
 - They can reference and build on each other's points
 - They can disagree with each other
 - Keep each persona's unique voice and style
-- Be specific about the project's actual code and architecture
+- ${topicFocus}
 
 ${langInstruction}
 
@@ -362,9 +403,52 @@ app.get("/api/project/context", (_req, res) => {
   res.json({ context: projectContext });
 });
 
+// Translate project context to Korean
+app.post("/api/project/context/translate", async (req, res) => {
+  const { provider = "anthropic" } = req.body as { provider?: Provider };
+  const systemPrompt = "You are a translator. Translate the following project context document from English to Korean. Keep code blocks, file paths, and technical terms as-is. Translate headings, descriptions, and explanatory text to natural Korean.";
+
+  try {
+    const apiKey = getApiKey(provider as Provider, req);
+    let translated: string;
+
+    if (provider === "openai") {
+      const client = new OpenAI({ apiKey });
+      const result = await client.chat.completions.create({
+        model: PROVIDER_MODELS.openai,
+        max_tokens: 8192,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: projectContext },
+        ],
+      });
+      translated = result.choices[0]?.message?.content || "";
+    } else if (provider === "gemini") {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: PROVIDER_MODELS.gemini, systemInstruction: systemPrompt });
+      const result = await model.generateContent(projectContext);
+      translated = result.response.text();
+    } else {
+      const client = new Anthropic({ apiKey });
+      const result = await client.messages.create({
+        model: PROVIDER_MODELS.anthropic,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: [{ role: "user", content: projectContext }],
+      });
+      translated = result.content[0]?.type === "text" ? result.content[0].text : "";
+    }
+
+    res.json({ translated });
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Translation failed";
+    res.status(500).json({ error: formatApiError(raw) });
+  }
+});
+
 app.get("/api/personas", (_req, res) => {
-  const list = Array.from(personas.values()).map(({ id, name, nameKo, title, titleKo, initial, color }) => ({
-    id, name, nameKo, title, titleKo, initial, color,
+  const list = Array.from(personas.values()).map(({ id, name, nameKo, title, titleKo, initial, color, category }) => ({
+    id, name, nameKo, title, titleKo, initial, color, category,
   }));
   res.json(list);
 });
@@ -401,7 +485,7 @@ app.post("/api/chat", async (req, res) => {
   await streamChat(req, res, buildSystemPrompt(persona, lang), messages, provider);
 });
 
-// Group chat (all 4 personas)
+// Group chat (dev personas)
 app.post("/api/chat/group", async (req, res) => {
   const { messages, lang = "en", provider = "anthropic" } = req.body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -409,7 +493,19 @@ app.post("/api/chat/group", async (req, res) => {
     provider?: Provider;
   };
 
-  await streamChat(req, res, buildGroupSystemPrompt(lang), messages, provider);
+  await streamChat(req, res, buildGroupSystemPrompt(lang, "dev"), messages, provider);
+});
+
+// Biz group chat (active biz personas)
+app.post("/api/chat/biz-group", async (req, res) => {
+  const { messages, lang = "en", provider = "anthropic", activeIds = [] } = req.body as {
+    messages: Array<{ role: "user" | "assistant"; content: string }>;
+    lang?: string;
+    provider?: Provider;
+    activeIds?: string[];
+  };
+
+  await streamChat(req, res, buildGroupSystemPrompt(lang, "biz", activeIds), messages, provider);
 });
 
 async function findAvailablePort(start: number): Promise<number> {

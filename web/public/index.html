@@ -363,6 +363,41 @@
     .project-badge { cursor: pointer; transition: background 0.12s; }
     .project-badge:hover { background: #eee; }
 
+    /* ── Category Section ──────────── */
+    .category-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 12px; margin-top: 8px;
+      cursor: pointer; user-select: none;
+    }
+    .category-header .label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--muted);
+    }
+    .category-header .arrow {
+      font-size: 10px; color: var(--muted); transition: transform 0.15s;
+    }
+    .category-header.collapsed .arrow { transform: rotate(-90deg); }
+    .category-items.collapsed { display: none; }
+
+    /* Biz toggle switch */
+    .biz-toggle {
+      width: 28px; height: 16px; border-radius: 8px;
+      background: #ddd; position: relative; cursor: pointer;
+      transition: background 0.15s; flex-shrink: 0;
+    }
+    .biz-toggle.on { background: #F39C12; }
+    .biz-toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: white; transition: transform 0.15s;
+    }
+    .biz-toggle.on::after { transform: translateX(12px); }
+    .persona-item .biz-toggle { margin-left: auto; }
+
+    .biz-group-av {
+      background: linear-gradient(135deg, #F39C12, #8E44AD, #27AE60, #2C3E50);
+    }
+
     @media (max-width: 768px) {
       .sidebar { display: none; }
       .context-panel { width: 100vw; }
@@ -395,7 +430,10 @@
     <div class="resize-handle" id="resizeHandle"></div>
     <div class="context-panel-header">
       <h2 id="contextTitle">Project Context</h2>
-      <button class="close-btn" onclick="closeContext()">&times;</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="close-btn" id="translateBtn" onclick="translateContext()" title="Translate" style="font-size:11px;width:auto;padding:0 8px;">EN/KO</button>
+        <button class="close-btn" onclick="closeContext()">&times;</button>
+      </div>
     </div>
     <div class="context-panel-body" id="contextBody">Loading...</div>
   </div>
@@ -459,12 +497,31 @@
 <script>
 // ── State ────────────────────────────
 let personas = [];
-let activeChat = null; // personaId or 'group'
+let activeChat = null; // personaId or 'group' or 'biz-group'
 let chatHistories = {};
 let isStreaming = false;
 let lang = localStorage.getItem('savant-lang') || 'en';
 let apiKey = localStorage.getItem('savant-api-key') || '';
 let provider = localStorage.getItem('savant-provider') || 'anthropic';
+let bizCollapsed = localStorage.getItem('savant-biz-collapsed') === 'true';
+
+// Biz agent activation state (localStorage)
+function getBizEnabled() {
+  try { return JSON.parse(localStorage.getItem('savant-biz-enabled') || '{}'); } catch { return {}; }
+}
+function setBizEnabled(id, on) {
+  const state = getBizEnabled();
+  state[id] = on;
+  localStorage.setItem('savant-biz-enabled', JSON.stringify(state));
+}
+function isBizEnabled(id) {
+  const state = getBizEnabled();
+  if (id === 'sayno') return true; // SayNo always on (gateway)
+  return state[id] === true;
+}
+function getActiveBizIds() {
+  return personas.filter(p => p.category === 'biz' && isBizEnabled(p.id)).map(p => p.id);
+}
 
 const providerNames = { anthropic: 'Claude', openai: 'GPT', gemini: 'Gemini' };
 const providerKeyNames = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY' };
@@ -477,9 +534,13 @@ const providerKeyLinks = {
 const i18n = {
   en: {
     welcome: 'Pick a persona and start chatting about your project.',
-    welcomeGroup: 'All 4 personas will discuss your question together.',
-    groupName: 'Team Chat',
-    groupTitle: 'All Personas',
+    welcomeGroup: 'All personas will discuss your question together.',
+    groupName: 'Dev Team Chat',
+    groupTitle: 'Dev Personas',
+    bizGroupName: 'Biz Team Chat',
+    bizGroupTitle: 'Biz Personas',
+    devSection: 'Development',
+    bizSection: 'Business',
     newChat: 'New Chat',
     apiKey: 'API Key',
     placeholder: 'Ask about your project...',
@@ -493,9 +554,13 @@ const i18n = {
   },
   ko: {
     welcome: '페르소나를 선택하고 프로젝트에 대해 대화하세요.',
-    welcomeGroup: '4명의 페르소나가 함께 당신의 질문을 논의합니다.',
-    groupName: '단톡방',
-    groupTitle: '전체 페르소나',
+    welcomeGroup: '페르소나가 함께 당신의 질문을 논의합니다.',
+    groupName: '개발 단톡방',
+    groupTitle: '개발 페르소나',
+    bizGroupName: '사업 단톡방',
+    bizGroupTitle: '사업 페르소나',
+    devSection: '개발',
+    bizSection: '사업',
     newChat: '새 대화',
     apiKey: 'API 키 설정',
     placeholder: '프로젝트에 대해 물어보세요...',
@@ -527,7 +592,8 @@ async function init() {
   applyLang();
   applyProviderButtons();
   renderPersonaList();
-  if (personas.length > 0) selectChat(personas[0].id);
+  const firstDev = personas.find(p => p.category === 'dev');
+  if (firstDev) selectChat(firstDev.id);
 }
 
 function setProvider(p) {
@@ -568,7 +634,15 @@ function applyLang() {
 
 function renderPersonaList() {
   const list = document.getElementById('personaList');
-  const items = personas.map(p => `
+  const devPersonas = personas.filter(p => p.category === 'dev');
+  const bizPersonas = personas.filter(p => p.category === 'biz');
+
+  // Dev section
+  const devHeader = `<div class="category-header" onclick="toggleCategory('dev')">
+    <span class="label">${t('devSection')}</span><span class="arrow">▼</span>
+  </div>`;
+
+  const devItems = devPersonas.map(p => `
     <div class="persona-item ${activeChat === p.id ? 'active' : ''}"
          onclick="selectChat('${p.id}')" id="chat-${p.id}">
       <div class="avatar" style="background:${p.color}">${p.initial}</div>
@@ -579,33 +653,82 @@ function renderPersonaList() {
     </div>
   `).join('');
 
-  // Group chat item
-  const groupActive = activeChat === 'group' ? 'active' : '';
-  const groupItem = `
-    <div class="persona-item ${groupActive}" onclick="selectChat('group')" id="chat-group"
-         style="margin-top:8px; border-top:1px solid var(--border); padding-top:12px;">
+  const devGroupItem = `
+    <div class="persona-item ${activeChat === 'group' ? 'active' : ''}"
+         onclick="selectChat('group')" id="chat-group">
       <div class="avatar group-av">All</div>
       <div class="persona-info">
         <div class="name">${t('groupName')}</div>
         <div class="title">${t('groupTitle')}</div>
       </div>
-    </div>
-  `;
+    </div>`;
+
+  // Biz section
+  const bizHeaderClass = bizCollapsed ? 'category-header collapsed' : 'category-header';
+  const bizItemsClass = bizCollapsed ? 'category-items collapsed' : 'category-items';
+  const bizHeader = `<div class="${bizHeaderClass}" onclick="toggleCategory('biz')" style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+    <span class="label">${t('bizSection')}</span><span class="arrow">▼</span>
+  </div>`;
+
+  const bizItems = bizPersonas.map(p => {
+    const enabled = isBizEnabled(p.id);
+    const isGateway = p.id === 'sayno';
+    const toggleHtml = isGateway ? '' :
+      `<div class="biz-toggle ${enabled ? 'on' : ''}" onclick="event.stopPropagation(); toggleBiz('${p.id}')"></div>`;
+    const itemClass = enabled || isGateway ? '' : 'opacity:0.4;';
+    const clickable = enabled || isGateway ? `onclick="selectChat('${p.id}')"` : `onclick="toggleBiz('${p.id}')"`;
+    return `
+      <div class="persona-item ${activeChat === p.id ? 'active' : ''}"
+           ${clickable} id="chat-${p.id}" style="${itemClass}">
+        <div class="avatar" style="background:${p.color}">${p.initial}</div>
+        <div class="persona-info">
+          <div class="name">${lang === 'ko' ? p.nameKo : p.name}</div>
+          <div class="title">${lang === 'ko' ? p.titleKo : p.title}</div>
+        </div>
+        ${toggleHtml}
+      </div>`;
+  }).join('');
+
+  const activeBiz = getActiveBizIds();
+  const bizGroupItem = activeBiz.length >= 2 ? `
+    <div class="persona-item ${activeChat === 'biz-group' ? 'active' : ''}"
+         onclick="selectChat('biz-group')" id="chat-biz-group">
+      <div class="avatar biz-group-av">Biz</div>
+      <div class="persona-info">
+        <div class="name">${t('bizGroupName')}</div>
+        <div class="title">${activeBiz.length} ${lang === 'ko' ? '명 활성' : 'active'}</div>
+      </div>
+    </div>` : '';
 
   const addAgentItem = `
     <a href="https://github.com/rlaope/claude-code-savant/issues" target="_blank"
        style="text-decoration:none;">
-      <div class="persona-item" style="margin-top:8px; border:1px dashed #ddd; background:#fafafa; opacity:0.7;">
+      <div class="persona-item" style="margin-top:10px; border:1px dashed #ddd; background:#fafafa; opacity:0.7;">
         <div class="avatar sm" style="background:#ddd; color:#999; font-size:16px;">+</div>
         <div class="persona-info">
           <div class="name" style="color:#999;">${lang === 'ko' ? '새 에이전트 추가 요청' : 'Request a New Agent'}</div>
           <div class="title">${lang === 'ko' ? 'GitHub Issue로 제안하기' : 'Suggest via GitHub Issue'}</div>
         </div>
       </div>
-    </a>
-  `;
+    </a>`;
 
-  list.innerHTML = items + groupItem + addAgentItem;
+  list.innerHTML = devHeader + `<div class="category-items">${devItems}${devGroupItem}</div>`
+    + bizHeader + `<div class="${bizItemsClass}">${bizItems}${bizGroupItem}</div>`
+    + addAgentItem;
+}
+
+function toggleCategory(cat) {
+  if (cat === 'biz') {
+    bizCollapsed = !bizCollapsed;
+    localStorage.setItem('savant-biz-collapsed', bizCollapsed);
+  }
+  renderPersonaList();
+}
+
+function toggleBiz(id) {
+  const current = isBizEnabled(id);
+  setBizEnabled(id, !current);
+  renderPersonaList();
 }
 
 function selectChat(id) {
@@ -618,6 +741,12 @@ function selectChat(id) {
     document.getElementById('headerAvatar').textContent = 'All';
     document.getElementById('headerName').textContent = t('groupName');
     document.getElementById('headerStatus').textContent = t('groupTitle');
+  } else if (id === 'biz-group') {
+    document.getElementById('headerAvatar').className = 'avatar biz-group-av';
+    document.getElementById('headerAvatar').style.background = '';
+    document.getElementById('headerAvatar').textContent = 'Biz';
+    document.getElementById('headerName').textContent = t('bizGroupName');
+    document.getElementById('headerStatus').textContent = t('bizGroupTitle');
   } else {
     const p = personas.find(x => x.id === id);
     if (!p) return;
@@ -641,12 +770,14 @@ function renderMessages() {
   const history = chatHistories[activeChat] || [];
 
   if (history.length === 0) {
-    const isGroup = activeChat === 'group';
+    const isGroup = activeChat === 'group' || activeChat === 'biz-group';
     const p = isGroup ? null : personas.find(x => x.id === activeChat);
-    const avStyle = isGroup
+    const avStyle = activeChat === 'biz-group'
+      ? 'class="avatar sm biz-group-av"'
+      : activeChat === 'group'
       ? 'class="avatar sm group-av"'
       : `class="avatar sm" style="background:${p?.color||'#666'}"`;
-    const avText = isGroup ? 'All' : (p?.initial || '?');
+    const avText = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
     const welcomeText = getWelcomeBubble(activeChat);
     container.innerHTML = `
       <div class="message-row assistant" style="margin-top:40px;">
@@ -657,14 +788,16 @@ function renderMessages() {
     return;
   }
 
-  const p = activeChat === 'group' ? null : personas.find(x => x.id === activeChat);
+  const isAnyGroup = activeChat === 'group' || activeChat === 'biz-group';
+  const p = isAnyGroup ? null : personas.find(x => x.id === activeChat);
 
   // Prepend welcome bubble before chat history
-  const isGroup2 = activeChat === 'group';
-  const wavStyle = isGroup2
+  const wavStyle = activeChat === 'biz-group'
+    ? 'class="avatar sm biz-group-av"'
+    : activeChat === 'group'
     ? 'class="avatar sm group-av"'
     : `class="avatar sm" style="background:${p?.color||'#666'}"`;
-  const wavText = isGroup2 ? 'All' : (p?.initial || '?');
+  const wavText = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
   const welcomePrefix = `
     <div class="message-row assistant" style="margin-top:20px;opacity:0.7;">
       <div ${wavStyle}>${wavText}</div>
@@ -679,12 +812,14 @@ function renderMessages() {
         <div class="bubble">${escapeHtml(msg.content)}</div>
       </div>`;
     }
-    const avStyle = activeChat === 'group'
+    const avStyle2 = activeChat === 'biz-group'
+      ? 'class="avatar sm biz-group-av"'
+      : activeChat === 'group'
       ? 'class="avatar sm group-av"'
       : `class="avatar sm" style="background:${p?.color||'#666'}"`;
-    const avText = activeChat === 'group' ? 'All' : (p?.initial || '?');
+    const avText2 = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
     return `<div class="message-row assistant">
-      <div ${avStyle}>${avText}</div>
+      <div ${avStyle2}>${avText2}</div>
       <div class="bubble">${marked.parse(msg.content, { breaks: true })}</div>
     </div>`;
   }).join('');
@@ -700,14 +835,32 @@ function getWelcomeBubble(id) {
     shakespeare: `Greetings! I'm the Shakespeare agent. I've read through the **${pName}** codebase. Share any code with me and I'll analyze its flow, structure, and drama with narrative and flowcharts.`,
     socrates: `Hello, I'm the Socrates agent. I'm standing by on the **${pName}** project. Got an error, bug, or stack trace? I'll trace it to its root cause through systematic investigation.`,
     stevejobs: `Hey. I'm the Steve Jobs agent. I've looked at **${pName}** closely. Tell me what you're building or where you're stuck — I'll give you bold, honest direction on what matters most.`,
-    group: `Welcome to the Team Chat for **${pName}**! All 4 personas — Einstein, Shakespeare, Socrates, and Steve Jobs — will discuss your question together and give you a synthesized consensus.`,
+    sayno: `Hi, I'm the SayNo (세이노) agent — your business gateway. I've analyzed **${pName}** from a business perspective. Ask me about monetization, revenue models, P&L projections, or market sizing — I'll give you the numbers that matter.`,
+    finance: `Hello, I'm the Finance PM. I specialize in investment strategy, fundraising, and financial modeling for **${pName}**. Ask me about valuation, cap tables, runway, or funding strategy.`,
+    growth: `Hi, I'm the Growth PM. I focus on user acquisition, retention, and scaling strategies for **${pName}**. Ask me about funnels, CAC, viral loops, or marketing channels.`,
+    legal: `Hello, I'm the Legal Advisor. I provide business law guidance for **${pName}**. Ask about entity formation, contracts, IP, or regulatory compliance.`,
+    fashion: `Hi, I'm the Fashion PM. I specialize in fashion business strategy. Ask me about brand positioning, seasonal planning, margin structures, or retail strategy for **${pName}**.`,
+    logistics: `Hello, I'm the Logistics Manager. I handle supply chain and operations analysis. Ask about fulfillment, inventory, delivery strategy, or cost optimization for **${pName}**.`,
+    fnb: `Hi, I'm the F&B PM. I specialize in food & beverage business. Ask about food costs, kitchen ops, delivery platform strategy, or menu engineering for **${pName}**.`,
+    saas: `Hello, I'm the SaaS PM. I focus on software business metrics. Ask about MRR, churn, pricing tiers, PLG strategy, or ARR growth modeling for **${pName}**.`,
+    group: `Welcome to the Dev Team Chat for **${pName}**! Einstein, Shakespeare, Socrates, and Steve Jobs will discuss your question together.`,
+    'biz-group': `Welcome to the Biz Team Chat for **${pName}**! Your active business agents will discuss your question together and synthesize strategic insights.`,
   };
   const ko = {
     einstein: `안녕하세요, 아인슈타인 에이전트입니다. **${pName}** 프로젝트를 분석 완료했습니다. 개념, 아키텍처, 동작 원리에 대해 질문해주세요 — 기초 원리부터 명쾌하게 설명해드리겠습니다.`,
     shakespeare: `반갑습니다! 셰익스피어 에이전트입니다. **${pName}** 코드베이스를 파악하고 있습니다. 코드를 보여주시면 흐름과 구조를 이야기와 플로차트로 분석해드릴게요.`,
     socrates: `안녕하세요, 소크라테스 에이전트입니다. **${pName}** 프로젝트에 대기 중입니다. 에러, 버그, 스택 트레이스가 있으신가요? 근본 원인까지 체계적으로 추적해드리겠습니다.`,
     stevejobs: `안녕하세요. 스티브 잡스 에이전트입니다. **${pName}** 프로젝트를 살펴봤습니다. 지금 만들고 있는 것이나 고민을 말씀해주세요 — 정말 중요한 것이 무엇인지 방향을 제시해드리겠습니다.`,
-    group: `**${pName}** 단톡방에 오신 걸 환영합니다! 아인슈타인, 셰익스피어, 소크라테스, 스티브 잡스 4명의 에이전트가 함께 질문에 답하고 의견을 종합해드립니다.`,
+    sayno: `안녕하세요, 세이노 에이전트입니다 — 사업 에이전트의 게이트웨이입니다. **${pName}** 프로젝트를 사업적 관점에서 분석했습니다. 수익화 모델, 매출 예측, 손익 계산, 시장 규모 등 숫자로 증명하는 전략을 제시해드리겠습니다.`,
+    finance: `안녕하세요, 파이낸스 PM입니다. **${pName}** 프로젝트의 투자 전략, 자금 조달, 재무 모델링을 담당합니다. 밸류에이션, 캡테이블, 런웨이, 펀딩 전략을 물어보세요.`,
+    growth: `안녕하세요, 그로스 PM입니다. **${pName}** 프로젝트의 유저 획득, 리텐션, 스케일링 전략을 담당합니다. 퍼널, CAC, 바이럴 루프, 마케팅 채널을 물어보세요.`,
+    legal: `안녕하세요, 법률 어드바이저입니다. **${pName}** 프로젝트의 사업 법률 가이드를 제공합니다. 법인 설립, 계약, 지식재산권, 규제 준수에 대해 물어보세요.`,
+    fashion: `안녕하세요, 패션 PM입니다. 패션 사업 전략 전문입니다. **${pName}**의 브랜드 포지셔닝, 시즌 기획, 마진 구조, 유통 전략을 물어보세요.`,
+    logistics: `안녕하세요, 물류 매니저입니다. 공급망과 운영 분석을 담당합니다. **${pName}**의 풀필먼트, 재고, 배송 전략, 비용 최적화를 물어보세요.`,
+    fnb: `안녕하세요, F&B PM입니다. 요식업 사업 전문입니다. **${pName}**의 원가율, 주방 운영, 배달 플랫폼 전략, 메뉴 엔지니어링을 물어보세요.`,
+    saas: `안녕하세요, SaaS PM입니다. 소프트웨어 비즈니스 지표 전문입니다. **${pName}**의 MRR, 이탈률, 가격 정책, PLG 전략, ARR 성장 모델링을 물어보세요.`,
+    group: `**${pName}** 개발 단톡방에 오신 걸 환영합니다! 아인슈타인, 셰익스피어, 소크라테스, 스티브 잡스가 함께 질문에 답하고 의견을 종합해드립니다.`,
+    'biz-group': `**${pName}** 사업 단톡방에 오신 걸 환영합니다! 활성화된 사업 에이전트들이 함께 전략적 인사이트를 종합해드립니다.`,
   };
   const texts = lang === 'ko' ? ko : en;
   return texts[id] || texts.einstein;
@@ -739,14 +892,17 @@ async function sendMessage() {
   renderMessages();
 
   // Typing indicator
-  const p = activeChat === 'group' ? null : personas.find(x => x.id === activeChat);
+  const isGroupChat = activeChat === 'group' || activeChat === 'biz-group';
+  const p = isGroupChat ? null : personas.find(x => x.id === activeChat);
   const container = document.getElementById('messages');
   const typingEl = document.createElement('div');
   typingEl.className = 'message-row assistant';
-  const avStyle = activeChat === 'group'
+  const avStyle = activeChat === 'biz-group'
+    ? 'class="avatar sm biz-group-av"'
+    : activeChat === 'group'
     ? 'class="avatar sm group-av"'
     : `class="avatar sm" style="background:${p?.color||'#666'}"`;
-  const avText = activeChat === 'group' ? 'All' : (p?.initial || '?');
+  const avText = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
   typingEl.innerHTML = `<div ${avStyle}>${avText}</div>
     <div class="bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
   container.appendChild(typingEl);
@@ -756,11 +912,17 @@ async function sendMessage() {
   document.getElementById('sendBtn').disabled = true;
   document.getElementById('headerStatus').textContent = t('typing');
 
-  const isGroup = activeChat === 'group';
-  const endpoint = isGroup ? '/api/chat/group' : '/api/chat';
-  const body = isGroup
-    ? { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider }
-    : { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider };
+  const isBizGroup = activeChat === 'biz-group';
+  const isDevGroup = activeChat === 'group';
+  const endpoint = isBizGroup ? '/api/chat/biz-group' : isDevGroup ? '/api/chat/group' : '/api/chat';
+  let body;
+  if (isBizGroup) {
+    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, activeIds: getActiveBizIds() };
+  } else if (isDevGroup) {
+    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider };
+  } else {
+    body = { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider };
+  }
 
   try {
     const response = await fetch(endpoint, {
@@ -834,7 +996,7 @@ async function sendMessage() {
 
   isStreaming = false;
   document.getElementById('sendBtn').disabled = false;
-  const statusText = activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? p?.titleKo : p?.title);
+  const statusText = activeChat === 'biz-group' ? t('bizGroupTitle') : activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? p?.titleKo : p?.title);
   document.getElementById('headerStatus').textContent = statusText;
 }
 
@@ -933,6 +1095,63 @@ function autoResize(el) {
 
 // ── Context Panel ────────────────
 let contextLoaded = false;
+let contextRaw = '';
+let contextTranslated = '';
+let contextShowingKo = false;
+
+async function translateContext() {
+  if (!contextRaw) return;
+
+  // Toggle between original and translated
+  if (contextShowingKo && contextTranslated) {
+    // Switch back to original
+    contextShowingKo = false;
+    renderContextBody(contextRaw);
+    document.getElementById('translateBtn').textContent = 'KO';
+    return;
+  }
+
+  if (contextTranslated) {
+    // Show cached translation
+    contextShowingKo = true;
+    renderContextBody(contextTranslated);
+    document.getElementById('translateBtn').textContent = 'EN';
+    return;
+  }
+
+  // Request translation
+  document.getElementById('translateBtn').textContent = '...';
+  document.getElementById('translateBtn').disabled = true;
+
+  try {
+    const res = await fetch('/api/project/context/translate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+      },
+      body: JSON.stringify({ provider }),
+    });
+    const { translated } = await res.json();
+    contextTranslated = translated;
+    contextShowingKo = true;
+    renderContextBody(translated);
+    document.getElementById('translateBtn').textContent = 'EN';
+  } catch (err) {
+    document.getElementById('translateBtn').textContent = 'KO';
+    alert(lang === 'ko' ? '번역 실패: API 키를 확인해주세요.' : 'Translation failed. Check your API key.');
+  }
+  document.getElementById('translateBtn').disabled = false;
+}
+
+function renderContextBody(content) {
+  const sizeKb = (new TextEncoder().encode(content).length / 1024).toFixed(1);
+  const label = contextShowingKo ? '컨텍스트 크기' : 'Context size';
+  document.getElementById('contextBody').innerHTML =
+    `<div class="context-stat">${label}: ${sizeKb}KB</div>` +
+    marked.parse(content, { breaks: true });
+  document.getElementById('contextBody').querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+}
 
 async function openContext() {
   document.getElementById('contextOverlay').classList.add('show');
@@ -944,11 +1163,10 @@ async function openContext() {
     try {
       const res = await fetch('/api/project/context');
       const { context } = await res.json();
-      const sizeKb = (new TextEncoder().encode(context).length / 1024).toFixed(1);
-      document.getElementById('contextBody').innerHTML =
-        `<div class="context-stat">${lang === 'ko' ? '컨텍스트 크기' : 'Context size'}: ${sizeKb}KB</div>` +
-        marked.parse(context, { breaks: true });
-      document.getElementById('contextBody').querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+      contextRaw = context;
+      contextShowingKo = false;
+      renderContextBody(context);
+      document.getElementById('translateBtn').textContent = 'KO';
       contextLoaded = true;
     } catch {
       document.getElementById('contextBody').innerHTML = '<p>Failed to load context.</p>';

@@ -1,6 +1,6 @@
 # claude-code-savant
 
-A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, and **Socrates** for error debugging.
+A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, **Socrates** for error debugging, and **SayNo (세이노)** for business strategy & monetization.
 
 ![](./assets/savant.png)
 
@@ -234,6 +234,7 @@ The Smart Router will:
 | `/savant-code` | Shakespeare | Code analysis with flowcharts |
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
 | `/savant-fix` | Socrates | Error analysis, root cause debugging |
+| `/savant-biz` | SayNo (세이노) | Business strategy, monetization, P&L analysis |
 | `/savant-update` | **Update** | Check for updates and upgrade |
 
 ### Direct Agent Calls
@@ -244,6 +245,7 @@ claude-code-savant:einstein     # First principles explanations
 claude-code-savant:shakespeare  # Narrative with diagrams
 claude-code-savant:stevejobs    # Visionary direction and ideas
 claude-code-savant:socrates     # Error debugging and root cause analysis
+claude-code-savant:sayno        # Business strategy and monetization
 ```
 
 ### Examples
@@ -299,6 +301,35 @@ function fibonacci(n) {
 - **Output**: Thorough error analysis with fixes and prevention strategies
 - **Use when**: You have an error, stack trace, or bug to investigate
 
+### The Strategist (SayNo / 세이노)
+
+- **Style**: Data-driven, numbers-first analysis
+- **Strength**: Revenue modeling, P&L projections, market sizing
+- **Output**: Financial tables, unit economics, break-even analysis
+- **Use when**: You need monetization strategy, business planning, or financial projections
+- **Gateway**: SayNo also serves as the entry point to all business domain agents
+
+## Business Domain Agents
+
+SayNo is the gateway to specialized business domain agents. Activate only the ones you need in the Savant Chat sidebar.
+
+| Agent | Domain | Specialization |
+|-------|--------|---------------|
+| **Finance PM** | Investment & Finance | Fundraising, valuation, cap tables, financial modeling |
+| **Growth PM** | Marketing & Growth | User acquisition, retention, funnels, A/B testing |
+| **Legal Advisor** | Business Law | Entity formation, contracts, IP, regulatory compliance |
+| **Fashion PM** | Fashion & Retail | Brand positioning, seasonal planning, margin structures |
+| **Logistics Manager** | Supply Chain & Ops | Fulfillment, inventory, delivery, cost optimization |
+| **F&B PM** | Food & Beverage | Food costs, kitchen ops, delivery platforms, menu engineering |
+| **SaaS PM** | Software Business | MRR, churn, pricing tiers, PLG strategy, ARR growth |
+
+### How It Works
+
+1. **SayNo is always on** — the general business strategist and gateway
+2. **Toggle domain agents** on/off in the Savant Chat sidebar
+3. **Biz Team Chat** — activated business agents discuss your question together
+4. Each agent has deep domain knowledge including Korean market specifics
+
 ## Savant Chat (Web UI)
 
 A local messenger-style chat interface to talk with AI personas about your project. Each persona understands your project's codebase, architecture, and conventions.
@@ -343,8 +374,8 @@ The chat server automatically scans your project directory (package.json, README
 
 | Feature | Description |
 |---------|-------------|
-| **1:1 Chat** | Chat with Einstein, Shakespeare, Socrates, or Steve Jobs individually |
-| **Team Chat** | All 4 personas discuss your question together (단톡방) |
+| **1:1 Chat** | Chat with Einstein, Shakespeare, Socrates, Steve Jobs, or SayNo individually |
+| **Team Chat** | All 5 personas discuss your question together (단톡방) |
 | **Language Toggle** | Switch between English and Korean (EN/KO) |
 | **Project Context** | Click the project badge to see what the AI knows |
 | **API Key Setup** | Built-in UI for setting your Anthropic API key |
@@ -377,7 +408,16 @@ claude-code-savant/
 │   ├── einstein.md           # Einstein persona definition
 │   ├── shakespeare.md        # Shakespeare persona definition
 │   ├── stevejobs.md          # Steve Jobs persona definition
-│   └── socrates.md           # Socrates persona definition
+│   ├── socrates.md           # Socrates persona definition
+│   ├── sayno.md              # SayNo (세이노) business strategy gateway
+│   └── biz/                  # Business domain agents
+│       ├── finance.md        # Finance PM - Investment & Finance
+│       ├── growth.md         # Growth PM - Marketing & Growth
+│       ├── legal.md          # Legal Advisor - Business Law
+│       ├── fashion.md        # Fashion PM - Fashion & Retail
+│       ├── logistics.md      # Logistics Manager - Supply Chain
+│       ├── fnb.md            # F&B PM - Food & Beverage
+│       └── saas.md           # SaaS PM - Software Business
 ├── web/
 │   ├── server.ts              # Chat server (Express + Anthropic API)
 │   ├── cli.ts                 # CLI entry point (savant-chat command)
