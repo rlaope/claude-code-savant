@@ -1,10 +1,14 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import cors from "cors";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
 import { execSync } from "child_process";
+
+type Provider = "anthropic" | "openai" | "gemini";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -175,10 +179,24 @@ function formatApiError(raw: string): string {
   return raw;
 }
 
-function getClient(req?: express.Request): Anthropic {
-  const apiKey = req?.headers["x-api-key"] as string || process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-  return new Anthropic({ apiKey });
+const PROVIDER_MODELS: Record<Provider, string> = {
+  anthropic: "claude-sonnet-4-20250514",
+  openai: "gpt-4o",
+  gemini: "gemini-2.0-flash",
+};
+
+const PROVIDER_ENV_KEYS: Record<Provider, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
+};
+
+function getApiKey(provider: Provider, req?: express.Request): string {
+  const headerKey = req?.headers["x-api-key"] as string;
+  const envKey = process.env[PROVIDER_ENV_KEYS[provider]];
+  const key = headerKey || envKey;
+  if (!key) throw new Error(`${PROVIDER_ENV_KEYS[provider]} not set`);
+  return key;
 }
 
 function buildSystemPrompt(persona: PersonaInfo, lang: string): string {
@@ -243,30 +261,86 @@ ${langInstruction}
 ${projectContext}`;
 }
 
+async function streamAnthropic(
+  apiKey: string, systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  res: express.Response
+): Promise<void> {
+  const client = new Anthropic({ apiKey });
+  const stream = await client.messages.stream({
+    model: PROVIDER_MODELS.anthropic,
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages,
+  });
+  for await (const event of stream) {
+    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+    }
+  }
+}
+
+async function streamOpenAI(
+  apiKey: string, systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  res: express.Response
+): Promise<void> {
+  const client = new OpenAI({ apiKey });
+  const stream = await client.chat.completions.create({
+    model: PROVIDER_MODELS.openai,
+    max_tokens: 4096,
+    stream: true,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ],
+  });
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+  }
+}
+
+async function streamGemini(
+  apiKey: string, systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  res: express.Response
+): Promise<void> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: PROVIDER_MODELS.gemini,
+    systemInstruction: systemPrompt,
+  });
+  const history = messages.slice(0, -1).map(m => ({
+    role: m.role === "user" ? "user" as const : "model" as const,
+    parts: [{ text: m.content }],
+  }));
+  const lastMsg = messages[messages.length - 1]?.content || "";
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessageStream(lastMsg);
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+  }
+}
+
 async function streamChat(
   req: express.Request,
   res: express.Response,
   systemPrompt: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  provider: Provider = "anthropic"
 ): Promise<void> {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
   try {
-    const client = getClient(req);
-    const stream = await client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages,
-    });
+    const apiKey = getApiKey(provider, req);
+    if (provider === "openai") await streamOpenAI(apiKey, systemPrompt, messages, res);
+    else if (provider === "gemini") await streamGemini(apiKey, systemPrompt, messages, res);
+    else await streamAnthropic(apiKey, systemPrompt, messages, res);
 
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
-      }
-    }
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (err: unknown) {
@@ -303,28 +377,39 @@ app.post("/api/read-file", (req, res) => {
   res.json({ content: fs.readFileSync(resolved, "utf-8").slice(0, 50000) });
 });
 
+// Available providers
+app.get("/api/providers", (_req, res) => {
+  res.json([
+    { id: "anthropic", name: "Claude", model: PROVIDER_MODELS.anthropic, envKey: "ANTHROPIC_API_KEY" },
+    { id: "openai", name: "GPT", model: PROVIDER_MODELS.openai, envKey: "OPENAI_API_KEY" },
+    { id: "gemini", name: "Gemini", model: PROVIDER_MODELS.gemini, envKey: "GEMINI_API_KEY" },
+  ]);
+});
+
 // Single persona chat
 app.post("/api/chat", async (req, res) => {
-  const { personaId, messages, lang = "en" } = req.body as {
+  const { personaId, messages, lang = "en", provider = "anthropic" } = req.body as {
     personaId: string;
     messages: Array<{ role: "user" | "assistant"; content: string }>;
     lang?: string;
+    provider?: Provider;
   };
 
   const persona = personas.get(personaId);
   if (!persona) { res.status(400).json({ error: "Unknown persona" }); return; }
 
-  await streamChat(req, res, buildSystemPrompt(persona, lang), messages);
+  await streamChat(req, res, buildSystemPrompt(persona, lang), messages, provider);
 });
 
 // Group chat (all 4 personas)
 app.post("/api/chat/group", async (req, res) => {
-  const { messages, lang = "en" } = req.body as {
+  const { messages, lang = "en", provider = "anthropic" } = req.body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
     lang?: string;
+    provider?: Provider;
   };
 
-  await streamChat(req, res, buildGroupSystemPrompt(lang), messages);
+  await streamChat(req, res, buildGroupSystemPrompt(lang), messages, provider);
 });
 
 const PORT = process.env.PORT || 3456;
