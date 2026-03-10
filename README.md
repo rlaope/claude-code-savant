@@ -1,6 +1,6 @@
 # claude-code-savant
 
-A Claude Code plugin that provides expert explanations through distinctive personas: **Shakespeare** for code narratives, **Einstein** for deep understanding, **Steve Jobs** for visionary direction, **Socrates** for error debugging, and **SayNo** for business strategy & monetization.
+A Claude Code plugin with 5 expert personas and 14 business domain agents that give AI responses unique character and domain expertise. Includes a web chat UI with local Claude Code integration — no API keys needed.
 
 ![](./assets/savant.png)
 
@@ -151,24 +151,32 @@ A Claude Code plugin that provides expert explanations through distinctive perso
 
 ## Installation
 
-### Via Marketplace (Recommended)
+### From Claude Code (Recommended)
 
 ```bash
-# Step 1: Add the marketplace
-/plugin marketplace add rlaope/claude-code-savant
-
-# Step 2: Install the plugin
+# Install the plugin (setup wizard runs automatically)
 /plugin install claude-code-savant
+
+# Launch the web chat UI
+/savant-chat
+# → Opens http://localhost:3456 with your project context
 ```
 
-### Manual Installation (Alternative)
+That's it. No API key needed — the default provider uses your local Claude Code.
+
+### Alternative Methods
 
 ```bash
-# Clone the repository
+# npx (no install needed)
+npx claude-code-savant
+
+# Or install globally
+npm install -g claude-code-savant
+savant-chat
+
+# Or clone manually
 git clone https://github.com/rlaope/claude-code-savant.git
 cd claude-code-savant
-
-# Run Claude Code with the plugin
 claude --plugin-dir .
 ```
 
@@ -363,26 +371,34 @@ The chat server automatically scans your project directory (package.json, README
 
 | Feature | Description |
 |---------|-------------|
+| **Claude Code (Local)** | Chat using local Claude Code CLI — no API key needed (default) |
+| **Multi-Provider** | Switch between Claude Code, Anthropic API, OpenAI, or Gemini |
 | **1:1 Chat** | Chat with Einstein, Shakespeare, Socrates, Steve Jobs, or SayNo individually |
-| **Team Chat** | All 5 personas discuss your question together (단톡방) |
+| **Biz Agents** | 14 business domain agents with Korean market expertise |
+| **Team Chat** | All personas discuss your question together (단톡방) |
 | **Language Toggle** | Switch between English and Korean (EN/KO) |
+| **Token Usage** | Display input/output token counts per response |
+| **Chat History** | Conversations persist across page refresh (localStorage) |
+| **Agent Editing** | Double-click agent names in sidebar to rename |
 | **Project Context** | Click the project badge to see what the AI knows |
-| **API Key Setup** | Built-in UI for setting your Anthropic API key |
-| **Streaming** | Real-time streaming responses |
+| **Streaming** | Real-time streaming responses (API providers) |
 
 ### Screenshots
 
 Open `http://localhost:3456` after launching:
 
-- **Left sidebar**: Persona selection + Team Chat + Language toggle
+- **Left sidebar**: Dev/Biz persona selection + Team Chat + Language toggle
 - **Main area**: Messenger-style chat with markdown rendering
+- **Top bar**: Provider selection (Claude Code / Claude / GPT / Gemini)
 - **Project badge**: Click to see full project context the AI understands
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Your Anthropic API key | _(required)_ |
+| `ANTHROPIC_API_KEY` | Anthropic API key (optional if using Claude Code) | — |
+| `OPENAI_API_KEY` | OpenAI API key (optional) | — |
+| `GEMINI_API_KEY` | Gemini API key (optional) | — |
 | `PROJECT_DIR` | Project directory to scan | Current directory |
 | `PORT` | Server port | `3456` |
 
@@ -422,10 +438,10 @@ claude-code-savant/
 │       ├── education/        # (same structure)
 │       └── travel/           # (same structure)
 ├── web/
-│   ├── server.ts              # Chat server (Express + Anthropic API)
+│   ├── server.ts              # Chat server (Express + SSE, multi-provider)
 │   ├── cli.ts                 # CLI entry point (savant-chat command)
 │   └── public/
-│       └── index.html         # Messenger-style chat UI
+│       └── index.html         # Messenger-style chat UI (SPA)
 ├── docs/
 │   └── business-agents.md    # Full business agents documentation
 ├── commands/
