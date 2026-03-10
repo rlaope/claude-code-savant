@@ -19,3 +19,10 @@ khope/
 
 # Test coverage
 coverage/
+
+# OMC state/sessions (oh-my-claudecode)
+.omc/
+web/.omc/
+
+# Claude settings
+.claude/
