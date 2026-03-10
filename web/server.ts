@@ -483,25 +483,32 @@ async function streamLocal(
     const proc = spawn(claudeCliPath!, [
       "-p", userPrompt,
       "--system-prompt", systemPrompt,
-      "--output-format", "text",
-      "--max-turns", "1",
+      "--output-format", "json",
+      "--max-turns", "3",
     ], {
       stdio: ["ignore", "pipe", "pipe"],
       env: cleanEnv,
     });
     console.error(`[claude-local] PID: ${proc.pid || "FAILED"}`);
 
-    let hasText = false;
+    let stdout = "";
+
+    // Progress status updates while waiting for response
+    const statusMessages = [
+      { delay: 2000, msg: "Analyzing your question..." },
+      { delay: 5000, msg: "Deep thinking..." },
+      { delay: 10000, msg: "Generating response..." },
+      { delay: 18000, msg: "Almost there..." },
+    ];
+    const statusTimers: NodeJS.Timeout[] = [];
+    for (const s of statusMessages) {
+      statusTimers.push(setTimeout(() => {
+        res.write(`data: ${JSON.stringify({ status: s.msg })}\n\n`);
+      }, s.delay));
+    }
 
     proc.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      if (text) {
-        if (!hasText) {
-          res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
-          hasText = true;
-        }
-        res.write(`data: ${JSON.stringify({ text })}\n\n`);
-      }
+      stdout += chunk.toString();
     });
 
     proc.stderr.on("data", (chunk: Buffer) => {
@@ -511,6 +518,19 @@ async function streamLocal(
 
     proc.on("close", (code) => {
       console.error(`[claude-local] Process exited with code: ${code}`);
+      for (const t of statusTimers) clearTimeout(t);
+      res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
+      try {
+        const parsed = JSON.parse(stdout);
+        const text = parsed.result || parsed.content || stdout;
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        if (parsed.usage) {
+          res.write(`data: ${JSON.stringify({ usage: parsed.usage })}\n\n`);
+        }
+      } catch {
+        // JSON parse failed — send raw stdout as text
+        if (stdout.trim()) res.write(`data: ${JSON.stringify({ text: stdout })}\n\n`);
+      }
       resolve();
     });
 
