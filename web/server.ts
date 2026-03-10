@@ -67,6 +67,7 @@ interface PersonaInfo {
   color: string;
   category: PersonaCategory;
   systemPrompt: string;
+  lightSystemPrompt: string;
 }
 
 type PersonaMeta = { name: string; nameKo: string; title: string; titleKo: string; initial: string; color: string };
@@ -104,17 +105,29 @@ function scanProject(dir: string): string {
   const readmePath = path.join(dir, "README.md");
   if (fs.existsSync(readmePath)) {
     lines.push(`\n## README (excerpt)`);
-    lines.push(fs.readFileSync(readmePath, "utf-8").slice(0, 3000));
+    lines.push(fs.readFileSync(readmePath, "utf-8").slice(0, 5000));
   }
 
   const claudeMdPath = path.join(dir, "CLAUDE.md");
   if (fs.existsSync(claudeMdPath)) {
     lines.push(`\n## CLAUDE.md (Project Instructions)`);
-    lines.push(fs.readFileSync(claudeMdPath, "utf-8").slice(0, 2000));
+    lines.push(fs.readFileSync(claudeMdPath, "utf-8").slice(0, 5000));
+  }
+
+  const agentsMdPath = path.join(dir, "AGENTS.md");
+  if (fs.existsSync(agentsMdPath)) {
+    lines.push(`\n## AGENTS.md (Agent Instructions)`);
+    lines.push(fs.readFileSync(agentsMdPath, "utf-8").slice(0, 3000));
+  }
+
+  const envExamplePath = path.join(dir, ".env.example");
+  if (fs.existsSync(envExamplePath)) {
+    lines.push(`\n## Environment Variables (.env.example)`);
+    lines.push("```\n" + fs.readFileSync(envExamplePath, "utf-8").slice(0, 1000) + "\n```");
   }
 
   lines.push(`\n## Directory Structure\n\`\`\``);
-  try { lines.push(buildTree(dir, 2)); } catch { lines.push("(could not read)"); }
+  try { lines.push(buildTree(dir, 3)); } catch { lines.push("(could not read)"); }
   lines.push("```");
 
   try {
@@ -128,11 +141,48 @@ function scanProject(dir: string): string {
     const sdPath = path.join(dir, sd);
     if (fs.existsSync(sdPath) && fs.statSync(sdPath).isDirectory()) {
       lines.push(`\n## Key Source Files (${sd}/)`);
-      for (const f of collectFiles(sdPath, 3).slice(0, 30)) {
+      const sourceFiles = collectFiles(sdPath, 3).slice(0, 30);
+      for (const f of sourceFiles) {
         lines.push(`- \`${path.relative(dir, f)}\` (${fs.statSync(f).size} bytes)`);
+      }
+      // Include content of top 5 source files (first 80 lines each)
+      const codeExts = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".vue", ".svelte"]);
+      const topFiles = sourceFiles.filter(f => codeExts.has(path.extname(f))).slice(0, 5);
+      for (const f of topFiles) {
+        try {
+          const content = fs.readFileSync(f, "utf-8").split("\n").slice(0, 80).join("\n");
+          lines.push(`\n### \`${path.relative(dir, f)}\` (preview)\n\`\`\`\n${content}\n\`\`\``);
+        } catch { /* skip unreadable */ }
       }
     }
   }
+
+  return lines.join("\n");
+}
+
+function scanProjectLight(dir: string): string {
+  const lines: string[] = [];
+  lines.push(`# Project Context`);
+  lines.push(`**Project Name**: \`${path.basename(dir)}\``);
+
+  const pkgPath = path.join(dir, "package.json");
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      lines.push(`- **Name**: ${pkg.name || "unknown"}`);
+      lines.push(`- **Version**: ${pkg.version || "unknown"}`);
+      lines.push(`- **Description**: ${pkg.description || "none"}`);
+    } catch { /* ignore */ }
+  }
+
+  lines.push(`\n## Directory Structure\n\`\`\``);
+  try { lines.push(buildTree(dir, 2)); } catch { lines.push("(could not read)"); }
+  lines.push("```");
+
+  try {
+    const branch = execSync("git branch --show-current", { cwd: dir, encoding: "utf-8" }).trim();
+    lines.push(`\n- **Branch**: ${branch}`);
+  } catch { /* not a git repo */ }
 
   return lines.join("\n");
 }
@@ -269,14 +319,28 @@ function loadPersonaFromDir(dirOrFile: string): string | null {
   return null;
 }
 
+function loadPersonaLightweight(dirOrFile: string): string | null {
+  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isFile()) {
+    return loadPersonaFromFile(dirOrFile);
+  }
+  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isDirectory()) {
+    // Fast mode: only load persona.md (skip templates, examples, benchmarks)
+    const personaPath = path.join(dirOrFile, 'persona.md');
+    return loadPersonaFromFile(personaPath);
+  }
+  return null;
+}
+
 function loadPersonas(): Map<string, PersonaInfo> {
   const result = new Map<string, PersonaInfo>();
 
   // Dev agents from agents/dev/{id}/
   for (const [id, info] of Object.entries(DEV_META)) {
-    const prompt = loadPersonaFromDir(path.join(PERSONAS_DIR, "dev", id));
+    const devDir = path.join(PERSONAS_DIR, "dev", id);
+    const prompt = loadPersonaFromDir(devDir);
+    const lightPrompt = loadPersonaLightweight(devDir);
     const meta = applyOverrides(id, info);
-    if (prompt) result.set(id, { id, ...meta, category: "dev", systemPrompt: prompt });
+    if (prompt) result.set(id, { id, ...meta, category: "dev", systemPrompt: prompt, lightSystemPrompt: lightPrompt || prompt });
   }
 
   // Biz agents from agents/biz/{id}/ (sayno is now under agents/dev/sayno/)
@@ -285,15 +349,17 @@ function loadPersonas(): Map<string, PersonaInfo> {
       ? path.join(PERSONAS_DIR, "dev", id)
       : path.join(PERSONAS_DIR, "biz", id);
     const prompt = loadPersonaFromDir(dirPath);
+    const lightPrompt = loadPersonaLightweight(dirPath);
     const meta = applyOverrides(id, info);
-    if (prompt) result.set(id, { id, ...meta, category: "biz", systemPrompt: prompt });
+    if (prompt) result.set(id, { id, ...meta, category: "biz", systemPrompt: prompt, lightSystemPrompt: lightPrompt || prompt });
   }
 
   return result;
 }
 
 const personas = loadPersonas();
-const projectContext = scanProject(PROJECT_DIR);
+let projectContext = scanProject(PROJECT_DIR);
+let projectContextLight = scanProjectLight(PROJECT_DIR);
 
 console.log(`\n  Project: ${path.basename(PROJECT_DIR)}`);
 console.log(`  Context: ${(projectContext.length / 1024).toFixed(1)}KB`);
@@ -339,12 +405,15 @@ function getApiKey(provider: Provider, req?: express.Request): string {
   return key;
 }
 
-function buildSystemPrompt(persona: PersonaInfo, lang: string): string {
+function buildSystemPrompt(persona: PersonaInfo, lang: string, mode: string = "deep"): string {
   const langInstruction = lang === "ko"
     ? "IMPORTANT: You MUST respond in Korean (한국어). Always use Korean regardless of the user's language."
     : "IMPORTANT: Respond in English.";
 
-  return `${persona.systemPrompt}
+  const prompt = mode === "fast" ? persona.lightSystemPrompt : persona.systemPrompt;
+  const context = mode === "fast" ? projectContextLight : projectContext;
+
+  return `${prompt}
 
 ---
 
@@ -356,10 +425,10 @@ Respond conversationally while staying in character. Be helpful, specific, and r
 
 ${langInstruction}
 
-${projectContext}`;
+${context}`;
 }
 
-function buildGroupSystemPrompt(lang: string, category: PersonaCategory = "dev", activeIds?: string[]): string {
+function buildGroupSystemPrompt(lang: string, category: PersonaCategory = "dev", activeIds?: string[], mode: string = "deep"): string {
   let personaList: PersonaInfo[];
 
   if (category === "biz" && activeIds && activeIds.length > 0) {
@@ -385,6 +454,8 @@ function buildGroupSystemPrompt(lang: string, category: PersonaCategory = "dev",
     ? "Focus on business strategy, monetization, market analysis, and financial viability."
     : "Be specific about the project's actual code and architecture.";
 
+  const context = mode === "fast" ? projectContextLight : projectContext;
+
   return `You are simulating a group discussion between ${count} expert personas. When the user asks a question, ALL ${count} personas respond with their unique perspective. Each persona stays in character.
 
 ## The Personas
@@ -408,7 +479,7 @@ After all ${count} respond, add a brief synthesis:
 
 ${langInstruction}
 
-${projectContext}`;
+${context}`;
 }
 
 async function streamAnthropic(
@@ -600,6 +671,13 @@ app.get("/api/project/context", (_req, res) => {
   res.json({ context: projectContext });
 });
 
+// Refresh project context (re-scan project files)
+app.post("/api/project/context/refresh", (_req, res) => {
+  projectContext = scanProject(PROJECT_DIR);
+  projectContextLight = scanProjectLight(PROJECT_DIR);
+  res.json({ ok: true, size: projectContext.length });
+});
+
 // Translate project context to Korean
 app.post("/api/project/context/translate", async (req, res) => {
   const { provider = "anthropic" } = req.body as { provider?: Provider };
@@ -694,40 +772,43 @@ app.get("/api/providers", (_req, res) => {
 
 // Single persona chat
 app.post("/api/chat", async (req, res) => {
-  const { personaId, messages, lang = "en", provider = "anthropic" } = req.body as {
+  const { personaId, messages, lang = "en", provider = "anthropic", mode = "deep" } = req.body as {
     personaId: string;
     messages: Array<{ role: "user" | "assistant"; content: string }>;
     lang?: string;
     provider?: Provider;
+    mode?: string;
   };
 
   const persona = personas.get(personaId);
   if (!persona) { res.status(400).json({ error: "Unknown persona" }); return; }
 
-  await streamChat(req, res, buildSystemPrompt(persona, lang), messages, provider);
+  await streamChat(req, res, buildSystemPrompt(persona, lang, mode), messages, provider);
 });
 
 // Group chat (dev personas)
 app.post("/api/chat/group", async (req, res) => {
-  const { messages, lang = "en", provider = "anthropic" } = req.body as {
+  const { messages, lang = "en", provider = "anthropic", mode = "deep" } = req.body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
     lang?: string;
     provider?: Provider;
+    mode?: string;
   };
 
-  await streamChat(req, res, buildGroupSystemPrompt(lang, "dev"), messages, provider);
+  await streamChat(req, res, buildGroupSystemPrompt(lang, "dev", undefined, mode), messages, provider);
 });
 
 // Biz group chat (active biz personas)
 app.post("/api/chat/biz-group", async (req, res) => {
-  const { messages, lang = "en", provider = "anthropic", activeIds = [] } = req.body as {
+  const { messages, lang = "en", provider = "anthropic", activeIds = [], mode = "deep" } = req.body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
     lang?: string;
     provider?: Provider;
     activeIds?: string[];
+    mode?: string;
   };
 
-  await streamChat(req, res, buildGroupSystemPrompt(lang, "biz", activeIds), messages, provider);
+  await streamChat(req, res, buildGroupSystemPrompt(lang, "biz", activeIds, mode), messages, provider);
 });
 
 async function findAvailablePort(start: number): Promise<number> {

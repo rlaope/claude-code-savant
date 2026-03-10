@@ -283,6 +283,33 @@
     .send-btn:hover { opacity: 0.85; }
     .send-btn:disabled { opacity: 0.25; cursor: default; }
     .send-btn svg { width: 16px; height: 16px; }
+    .mode-toggle {
+      display: flex;
+      gap: 2px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      padding: 2px;
+      margin-right: 6px;
+    }
+    .mode-toggle button {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: #888;
+      transition: all 0.2s;
+    }
+    .mode-toggle button.active {
+      background: #fff;
+      color: #333;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .mode-toggle button:hover:not(.active) {
+      color: #555;
+    }
     .input-hint { text-align: center; font-size: 10px; color: #ddd; margin-top: 6px; }
 
     /* ── API Key Modal ─────────────────── */
@@ -552,6 +579,7 @@
         <div class="name" id="headerName">Einstein</div>
         <div class="status" id="headerStatus">The Professor</div>
       </div>
+      <button onclick="clearCurrentChat()" title="Clear chat" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:16px;padding:6px 8px;border-radius:6px;color:#888;transition:all .2s" onmouseover="this.style.color='#e74c3c';this.style.background='rgba(231,76,60,0.1)'" onmouseout="this.style.color='#888';this.style.background='none'">&#x1f5d1;</button>
     </div>
 
     <div class="messages" id="messages">
@@ -565,6 +593,10 @@
       <div class="input-wrapper">
         <textarea id="input" rows="1" placeholder="Ask about your project..."
           onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
+        <div class="mode-toggle" id="modeToggle">
+          <button onclick="setChatMode('fast')" id="modeFast" title="Fast: lightweight persona, quick response"><span class="t" data-en="Fast" data-ko="빠른">Fast</span></button>
+          <button onclick="setChatMode('deep')" id="modeDeep" title="Deep: full persona with templates &amp; examples"><span class="t" data-en="Deep" data-ko="깊은">Deep</span></button>
+        </div>
         <button class="send-btn" id="sendBtn" onclick="sendMessage()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13"/>
@@ -581,6 +613,7 @@ let personas = [];
 let activeChat = null; // personaId or 'group' or 'biz-group'
 let chatHistories = JSON.parse(localStorage.getItem('savant-chat-histories') || '{}');
 let isStreaming = false;
+let chatMode = localStorage.getItem('savant-chat-mode') || 'fast'; // 'fast' or 'deep'
 
 function saveChatHistories() {
   try {
@@ -706,6 +739,8 @@ async function init() {
   applyLang();
   applyProviderButtons();
   renderPersonaList();
+  document.getElementById('modeFast').className = chatMode === 'fast' ? 'active' : '';
+  document.getElementById('modeDeep').className = chatMode === 'deep' ? 'active' : '';
   const firstDev = personas.find(p => p.category === 'dev');
   if (firstDev) selectChat(firstDev.id);
 }
@@ -1178,11 +1213,11 @@ async function sendMessage() {
   const endpoint = isBizGroup ? '/api/chat/biz-group' : isDevGroup ? '/api/chat/group' : '/api/chat';
   let body;
   if (isBizGroup) {
-    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, activeIds: getActiveBizIds() };
+    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, activeIds: getActiveBizIds(), mode: chatMode };
   } else if (isDevGroup) {
-    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider };
+    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, mode: chatMode };
   } else {
-    body = { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider };
+    body = { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, mode: chatMode };
   }
 
   try {
@@ -1419,6 +1454,23 @@ function clearChat() {
     renderMessages();
     document.getElementById('input').focus();
   }
+}
+
+function setChatMode(mode) {
+  chatMode = mode;
+  localStorage.setItem('savant-chat-mode', mode);
+  document.getElementById('modeFast').className = mode === 'fast' ? 'active' : '';
+  document.getElementById('modeDeep').className = mode === 'deep' ? 'active' : '';
+  updateLang();
+}
+
+function clearCurrentChat() {
+  if (!activeChat) return;
+  const msg = lang === 'ko' ? '이 대화 내역을 삭제하시겠습니까?' : 'Clear this chat?';
+  if (!confirm(msg)) return;
+  delete chatHistories[activeChat];
+  saveChatHistories();
+  renderChat(activeChat);
 }
 
 function downloadChat() {
