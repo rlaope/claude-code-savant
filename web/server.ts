@@ -10,16 +10,29 @@ import { execSync, spawn } from "child_process";
 
 type Provider = "local" | "anthropic" | "openai" | "gemini";
 
-// Check if claude CLI is available
-function isClaudeCliAvailable(): boolean {
+// Find claude CLI path
+function findClaudeCli(): string | null {
+  // Check common locations
+  const candidates = [
+    "claude",
+    path.join(process.env.HOME || "", ".nvm/versions/node", process.version, "bin/claude"),
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+  ];
+  for (const cmd of candidates) {
+    try {
+      const resolved = execSync(`which ${cmd} 2>/dev/null || echo ${cmd}`, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+      if (fs.existsSync(resolved)) return resolved;
+    } catch { /* continue */ }
+  }
   try {
-    execSync("which claude", { stdio: "pipe" });
-    return true;
+    return execSync("which claude", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch {
-    return false;
+    return null;
   }
 }
-const claudeCliAvailable = isClaudeCliAvailable();
+const claudeCliPath = findClaudeCli();
+const claudeCliAvailable = !!claudeCliPath;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +44,16 @@ const SAVANT_ROOT = path.join(__dirname, "..", "..");
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 const PERSONAS_DIR = path.join(SAVANT_ROOT, "agents");
-const PROJECT_DIR = process.env.PROJECT_DIR || process.cwd();
+
+function detectProjectDir(): string {
+  if (process.env.PROJECT_DIR) return process.env.PROJECT_DIR;
+  try {
+    return execSync("git rev-parse --show-toplevel", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  } catch {
+    return process.cwd();
+  }
+}
+const PROJECT_DIR = detectProjectDir();
 
 type PersonaCategory = "dev" | "biz";
 
@@ -177,6 +199,31 @@ const BIZ_META: Record<string, PersonaMeta> = {
   travel:    { name: "Travel PM",       nameKo: "여행 PM",      title: "Tourism & Hospitality", titleKo: "여행/관광 에이전트",  initial: "Tr", color: "#00BCD4" },
 };
 
+// ── Meta Overrides ───────────────────────────────────────────────
+const META_OVERRIDES_PATH = path.join(PERSONAS_DIR, "meta-overrides.json");
+
+function loadMetaOverrides(): Record<string, Partial<PersonaMeta>> {
+  try {
+    if (fs.existsSync(META_OVERRIDES_PATH)) {
+      return JSON.parse(fs.readFileSync(META_OVERRIDES_PATH, "utf-8"));
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveMetaOverrides(overrides: Record<string, Partial<PersonaMeta>>): void {
+  fs.writeFileSync(META_OVERRIDES_PATH, JSON.stringify(overrides, null, 2), "utf-8");
+}
+
+const metaOverrides = loadMetaOverrides();
+
+// Apply overrides to meta objects
+function applyOverrides(id: string, meta: PersonaMeta): PersonaMeta {
+  const override = metaOverrides[id];
+  if (!override) return meta;
+  return { ...meta, ...override };
+}
+
 function loadPersonaFromFile(filePath: string): string | null {
   if (!fs.existsSync(filePath)) return null;
   const content = fs.readFileSync(filePath, "utf-8");
@@ -212,7 +259,8 @@ function loadPersonas(): Map<string, PersonaInfo> {
   // Dev agents from agents/dev/{id}/
   for (const [id, info] of Object.entries(DEV_META)) {
     const prompt = loadPersonaFromDir(path.join(PERSONAS_DIR, "dev", id));
-    if (prompt) result.set(id, { id, ...info, category: "dev", systemPrompt: prompt });
+    const meta = applyOverrides(id, info);
+    if (prompt) result.set(id, { id, ...meta, category: "dev", systemPrompt: prompt });
   }
 
   // Biz agents from agents/biz/{id}/ (sayno is now under agents/dev/sayno/)
@@ -221,7 +269,8 @@ function loadPersonas(): Map<string, PersonaInfo> {
       ? path.join(PERSONAS_DIR, "dev", id)
       : path.join(PERSONAS_DIR, "biz", id);
     const prompt = loadPersonaFromDir(dirPath);
-    if (prompt) result.set(id, { id, ...info, category: "biz", systemPrompt: prompt });
+    const meta = applyOverrides(id, info);
+    if (prompt) result.set(id, { id, ...meta, category: "biz", systemPrompt: prompt });
   }
 
   return result;
@@ -415,71 +464,58 @@ async function streamLocal(
   res: express.Response
 ): Promise<void> {
   const historyParts = messages.slice(0, -1).map(m =>
-    `**${m.role === "user" ? "User" : "Assistant"}**: ${m.content}`
+    `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
   );
   const lastMsg = messages[messages.length - 1]?.content || "";
+  const userPrompt = historyParts.length > 0
+    ? [...historyParts, `User: ${lastMsg}`].join("\n\n")
+    : lastMsg;
 
-  const fullPrompt = [
-    systemPrompt,
-    "---",
-    ...(historyParts.length > 0 ? ["## Conversation History", ...historyParts, "---"] : []),
-    lastMsg,
-  ].join("\n\n");
-
+  console.error(`[claude-local] system: ${systemPrompt.length} chars, user: ${userPrompt.length} chars`);
   res.write(`data: ${JSON.stringify({ status: "Initializing Claude Code..." })}\n\n`);
 
   return new Promise((resolve, reject) => {
-    const proc = spawn("claude", ["-p", fullPrompt, "--output-format", "stream-json"], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const cleanEnv = { ...process.env };
+    for (const key of Object.keys(cleanEnv)) {
+      if (key.toUpperCase().includes("CLAUDE")) delete cleanEnv[key];
+    }
 
-    let buffer = "";
+    const proc = spawn(claudeCliPath!, [
+      "-p", userPrompt,
+      "--system-prompt", systemPrompt,
+      "--output-format", "text",
+      "--max-turns", "1",
+    ], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: cleanEnv,
+    });
+    console.error(`[claude-local] PID: ${proc.pid || "FAILED"}`);
+
     let hasText = false;
 
     proc.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-
-          if (event.type === "system" && event.subtype === "init") {
-            res.write(`data: ${JSON.stringify({ status: "Thinking..." })}\n\n`);
-          } else if (event.type === "content_block_start" && event.content_block?.type === "thinking") {
-            res.write(`data: ${JSON.stringify({ status: "Deep thinking..." })}\n\n`);
-          } else if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
-            if (!hasText) {
-              res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
-              hasText = true;
-            }
-            res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
-          } else if (event.type === "result" && event.result && !hasText) {
-            res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
-            res.write(`data: ${JSON.stringify({ text: event.result })}\n\n`);
-            hasText = true;
-          }
-        } catch { /* ignore non-JSON lines */ }
+      const text = chunk.toString();
+      if (text) {
+        if (!hasText) {
+          res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
+          hasText = true;
+        }
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
       }
     });
 
-    proc.stderr.on("data", () => { /* claude CLI status output, ignore */ });
+    proc.stderr.on("data", (chunk: Buffer) => {
+      const msg = chunk.toString().trim();
+      if (msg) console.error(`[claude-local] ${msg}`);
+    });
 
-    proc.on("close", () => {
-      if (buffer.trim()) {
-        try {
-          const event = JSON.parse(buffer);
-          if (event.type === "result" && event.result && !hasText) {
-            res.write(`data: ${JSON.stringify({ text: event.result })}\n\n`);
-          }
-        } catch { /* ignore */ }
-      }
+    proc.on("close", (code) => {
+      console.error(`[claude-local] Process exited with code: ${code}`);
       resolve();
     });
 
     proc.on("error", (err) => {
+      console.error(`[claude-local] Spawn error: ${err.message}`);
       reject(err);
     });
   });
@@ -576,6 +612,30 @@ app.get("/api/personas", (_req, res) => {
     id, name, nameKo, title, titleKo, initial, color, category,
   }));
   res.json(list);
+});
+
+// Update persona meta (name, title, etc.)
+app.put("/api/persona/:id/meta", (req, res) => {
+  const { id } = req.params;
+  const updates = req.body as Partial<PersonaMeta>;
+
+  if (!personas.has(id)) {
+    res.status(404).json({ error: "Unknown persona" });
+    return;
+  }
+
+  // Update in-memory
+  const persona = personas.get(id)!;
+  if (updates.name !== undefined) persona.name = updates.name;
+  if (updates.nameKo !== undefined) persona.nameKo = updates.nameKo;
+  if (updates.title !== undefined) persona.title = updates.title;
+  if (updates.titleKo !== undefined) persona.titleKo = updates.titleKo;
+
+  // Persist to overrides file
+  metaOverrides[id] = { ...metaOverrides[id], ...updates };
+  saveMetaOverrides(metaOverrides);
+
+  res.json({ ok: true, persona: { id, name: persona.name, nameKo: persona.nameKo, title: persona.title, titleKo: persona.titleKo } });
 });
 
 app.post("/api/read-file", (req, res) => {

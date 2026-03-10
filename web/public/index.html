@@ -225,9 +225,9 @@
     .bubble blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted); margin: 6px 0; }
     .bubble strong { font-weight: 700; }
 
-    .typing-indicator { display: flex; gap: 4px; padding: 4px 0; }
+    .typing-indicator { display: flex; gap: 5px; padding: 6px 0; align-items: center; }
     .typing-indicator span {
-      width: 6px; height: 6px; border-radius: 50%; background: #ccc;
+      width: 8px; height: 8px; border-radius: 50%; background: #999;
       animation: typing 1.2s infinite;
     }
     .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
@@ -238,10 +238,14 @@
     }
 
     .thinking-status {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 4px;
-      min-height: 16px;
+      font-size: 12px;
+      color: #666;
+      margin-top: 6px;
+      min-height: 18px;
+      transition: opacity 0.3s ease;
+      font-weight: 500;
+    }
+    .thinking-status:not(:empty) {
       animation: statusPulse 2s ease-in-out infinite;
     }
     @keyframes statusPulse {
@@ -503,11 +507,15 @@
     </div>
     <div class="persona-list" id="personaList"></div>
     <div class="sidebar-bottom">
-      <div class="lang-toggle" style="margin-bottom:4px">
-        <button class="active" onclick="setProvider('local')" id="provLocal">Claude Code</button>
-        <button onclick="setProvider('anthropic')" id="provAnthropic">Claude</button>
-        <button onclick="setProvider('openai')" id="provOpenai">GPT</button>
-        <button onclick="setProvider('gemini')" id="provGemini">Gemini</button>
+      <div style="margin-bottom:4px">
+        <div class="lang-toggle" style="margin-bottom:4px">
+          <button class="active" onclick="setProvider('local')" id="provLocal" style="width:100%">Claude Code<span style="font-size:9px;opacity:0.5;margin-left:4px">Default</span></button>
+        </div>
+        <div class="lang-toggle">
+          <button onclick="setProvider('anthropic')" id="provAnthropic">Claude</button>
+          <button onclick="setProvider('openai')" id="provOpenai">GPT</button>
+          <button onclick="setProvider('gemini')" id="provGemini">Gemini</button>
+        </div>
       </div>
       <div class="lang-toggle">
         <button class="active" onclick="setLang('en')" id="langEn">EN</button>
@@ -553,8 +561,19 @@
 // ── State ────────────────────────────
 let personas = [];
 let activeChat = null; // personaId or 'group' or 'biz-group'
-let chatHistories = {};
+let chatHistories = JSON.parse(localStorage.getItem('savant-chat-histories') || '{}');
 let isStreaming = false;
+
+function saveChatHistories() {
+  try {
+    // Keep only last 50 messages per chat to avoid localStorage limits
+    const trimmed = {};
+    for (const [key, msgs] of Object.entries(chatHistories)) {
+      trimmed[key] = msgs.slice(-50);
+    }
+    localStorage.setItem('savant-chat-histories', JSON.stringify(trimmed));
+  } catch { /* localStorage full, ignore */ }
+}
 let lang = localStorage.getItem('savant-lang') || 'en';
 let apiKey = localStorage.getItem('savant-api-key') || '';
 let provider = localStorage.getItem('savant-provider') || 'local';
@@ -587,11 +606,6 @@ const providerKeyLinks = {
   gemini: 'https://aistudio.google.com/apikey',
 };
 
-const thinkingMessages = {
-  en: ['Thinking...', 'Analyzing project...', 'Reading codebase...', 'Preparing response...', 'Almost there...'],
-  ko: ['생각 중...', '프로젝트 분석 중...', '코드 읽는 중...', '답변 준비 중...', '거의 다 됐어요...'],
-};
-let thinkingInterval = null;
 
 const i18n = {
   en: {
@@ -713,7 +727,7 @@ function renderPersonaList() {
          onclick="selectChat('${p.id}')" id="chat-${p.id}">
       <div class="avatar" style="background:${p.color}">${p.initial}</div>
       <div class="persona-info">
-        <div class="name">${lang === 'ko' ? p.nameKo : p.name}</div>
+        <div class="name" ondblclick="event.stopPropagation(); editPersonaName('${p.id}', this)">${lang === 'ko' ? p.nameKo : p.name}</div>
         <div class="title">${lang === 'ko' ? p.titleKo : p.title}</div>
       </div>
     </div>
@@ -745,7 +759,7 @@ function renderPersonaList() {
            onclick="selectChat('${p.id}')" id="chat-${p.id}">
         <div class="avatar" style="background:${p.color}">${p.initial}</div>
         <div class="persona-info">
-          <div class="name">${lang === 'ko' ? p.nameKo : p.name}</div>
+          <div class="name" ondblclick="event.stopPropagation(); editPersonaName('${p.id}', this)">${lang === 'ko' ? p.nameKo : p.name}</div>
           <div class="title">${lang === 'ko' ? p.titleKo : p.title}</div>
         </div>
       </div>`
@@ -1010,6 +1024,7 @@ async function sendMessage() {
 
   const history = chatHistories[activeChat];
   history.push({ role: 'user', content: text });
+  saveChatHistories();
   renderMessages();
 
   // Typing indicator
@@ -1036,22 +1051,10 @@ async function sendMessage() {
   document.getElementById('sendBtn').disabled = true;
   document.getElementById('headerStatus').textContent = t('typing');
 
-  // Start thinking message cycling for local provider
+  // Show initial status for local provider (server will send real status updates)
   if (provider === 'local') {
-    let thinkIdx = 0;
-    const msgs = thinkingMessages[lang] || thinkingMessages.en;
     const statusEl = document.getElementById('thinkingStatus');
-    if (statusEl) statusEl.textContent = msgs[0];
-    thinkingInterval = setInterval(() => {
-      thinkIdx = (thinkIdx + 1) % msgs.length;
-      const el = document.getElementById('thinkingStatus');
-      if (el) {
-        el.style.opacity = '0';
-        setTimeout(() => {
-          if (el) { el.textContent = msgs[thinkIdx]; el.style.opacity = '1'; }
-        }, 300);
-      }
-    }, 3000);
+    if (statusEl) statusEl.textContent = lang === 'ko' ? 'Claude Code 연결 중...' : 'Connecting to Claude Code...';
   }
 
   const isBizGroup = activeChat === 'biz-group';
@@ -1080,7 +1083,7 @@ async function sendMessage() {
     if (response.status === 500 && provider !== 'local') {
       const errText = await response.text();
       if (errText.includes('API_KEY')) {
-        if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+        
         typingEl.remove();
         history.pop(); // remove user msg
         showApiKeyModal();
@@ -1094,15 +1097,34 @@ async function sendMessage() {
     const decoder = new TextDecoder();
     let assistantText = '';
     let buffer = '';
+    let bubbleReady = false;
 
-    typingEl.remove();
-    history.push({ role: 'assistant', content: '' });
+    // For non-local providers, swap typing indicator for streaming bubble immediately
+    if (provider !== 'local') {
+      typingEl.remove();
+      bubbleReady = true;
+      history.push({ role: 'assistant', content: '' });
+      const msgRow = document.createElement('div');
+      msgRow.className = 'message-row assistant';
+      msgRow.innerHTML = `<div ${avStyle}>${avText}</div>
+        <div class="bubble" id="streaming-bubble"></div>`;
+      container.appendChild(msgRow);
+    } else {
+      history.push({ role: 'assistant', content: '' });
+    }
 
-    const msgRow = document.createElement('div');
-    msgRow.className = 'message-row assistant';
-    msgRow.innerHTML = `<div ${avStyle}>${avText}</div>
-      <div class="bubble" id="streaming-bubble"></div>`;
-    container.appendChild(msgRow);
+    function ensureBubble() {
+      if (bubbleReady) return;
+      // First real text arrived — swap typing for streaming bubble
+      
+      typingEl.remove();
+      bubbleReady = true;
+      const msgRow = document.createElement('div');
+      msgRow.className = 'message-row assistant';
+      msgRow.innerHTML = `<div ${avStyle}>${avText}</div>
+        <div class="bubble" id="streaming-bubble"></div>`;
+      container.appendChild(msgRow);
+    }
 
     while (true) {
       const { done, value } = await reader.read();
@@ -1118,19 +1140,30 @@ async function sendMessage() {
         try {
           const parsed = JSON.parse(data);
           if (parsed.status !== undefined) {
-            // Server-sent status update (local provider)
+            // Server-sent status update (local provider thinking phase)
             const statusEl = document.getElementById('thinkingStatus');
             if (statusEl) {
               if (parsed.status === '') {
-                // Clear thinking — text is about to arrive
-                if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+                statusEl.textContent = '';
               } else {
-                statusEl.textContent = parsed.status;
+                const statusI18n = {
+                  'Connecting to Claude Code...': { ko: 'Claude Code 연결 중...' },
+                  'Initializing Claude Code...': { ko: 'Claude Code 초기화 중...' },
+                  'Analyzing your question...': { ko: '질문 분석 중...' },
+                  'Generating response...': { ko: '답변 생성 중...' },
+                  'Deep thinking...': { ko: '깊이 생각하는 중...' },
+                };
+                const translated = lang === 'ko' && statusI18n[parsed.status]?.ko
+                  ? statusI18n[parsed.status].ko : parsed.status;
+                statusEl.style.opacity = '0';
+                setTimeout(() => { statusEl.textContent = translated; statusEl.style.opacity = '1'; }, 200);
               }
             }
           } else if (parsed.error) {
+            ensureBubble();
             assistantText += `\n\n**Error**: ${parsed.error}`;
           } else if (parsed.text) {
+            ensureBubble();
             assistantText += parsed.text;
           }
         } catch {}
@@ -1145,14 +1178,16 @@ async function sendMessage() {
     }
 
     history[history.length - 1].content = assistantText;
+    saveChatHistories();
   } catch (err) {
-    if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+    
     typingEl?.remove();
     history.push({ role: 'assistant', content: `**Error**: ${err.message}` });
+    saveChatHistories();
     renderMessages();
   }
 
-  if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+  
   isStreaming = false;
   document.getElementById('sendBtn').disabled = false;
   const statusText = activeChat === 'biz-group' ? t('bizGroupTitle') : activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? p?.titleKo : p?.title);
@@ -1189,9 +1224,65 @@ function saveApiKey() {
 }
 
 // ── Helpers ──────────────────────────
+// ── Inline Persona Name Edit ─────────
+function editPersonaName(id, el) {
+  const original = el.textContent;
+  el.contentEditable = 'true';
+  el.style.background = '#fff';
+  el.style.borderRadius = '3px';
+  el.style.padding = '0 4px';
+  el.style.outline = '1px solid #0984E3';
+  el.focus();
+
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+
+  function save() {
+    el.contentEditable = 'false';
+    el.style.background = '';
+    el.style.padding = '';
+    el.style.outline = '';
+    const newName = el.textContent.trim();
+    if (!newName || newName === original) {
+      el.textContent = original;
+      return;
+    }
+
+    const field = lang === 'ko' ? 'nameKo' : 'name';
+    fetch(`/api/persona/${id}/meta`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: newName }),
+    }).then(r => r.json()).then(data => {
+      if (data.ok) {
+        // Update local personas array
+        const p = personas.find(x => x.id === id);
+        if (p) {
+          if (lang === 'ko') p.nameKo = newName;
+          else p.name = newName;
+        }
+        // Update header if this is active chat
+        if (activeChat === id) {
+          document.getElementById('headerName').textContent = newName;
+        }
+      }
+    }).catch(() => { el.textContent = original; });
+  }
+
+  el.addEventListener('blur', save, { once: true });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+    if (e.key === 'Escape') { el.textContent = original; el.blur(); }
+  });
+}
+
 function clearChat() {
   if (activeChat) {
     chatHistories[activeChat] = [];
+    saveChatHistories();
     renderMessages();
     document.getElementById('input').focus();
   }
