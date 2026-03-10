@@ -179,6 +179,22 @@ const DEV_META: Record<string, PersonaMeta> = {
   shakespeare: { name: "Shakespeare", nameKo: "셰익스피어", title: "The Bard",       titleKo: "코드 분석 에이전트",     initial: "S", color: "#E17055" },
   socrates:    { name: "Socrates",    nameKo: "소크라테스",  title: "The Debugger",   titleKo: "디버깅 에이전트",        initial: "So", color: "#00B894" },
   stevejobs:   { name: "Steve Jobs",  nameKo: "스티브 잡스", title: "The Visionary",  titleKo: "방향 제시 에이전트",     initial: "J", color: "#0984E3" },
+  "jvm-developer":    { name: "JVM Developer",    nameKo: "JVM 개발자",      title: "JVM Performance Expert",    titleKo: "JVM 최적화 에이전트",       initial: "Jv", color: "#D63031" },
+  "python-developer": { name: "Python Developer", nameKo: "Python 개발자",   title: "Python Performance Expert", titleKo: "Python 최적화 에이전트",    initial: "Py", color: "#3776AB" },
+  "go-developer":     { name: "Go Developer",     nameKo: "Go 개발자",       title: "Go Performance Expert",     titleKo: "Go 최적화 에이전트",        initial: "Go", color: "#00ADD8" },
+  "rust-developer":   { name: "Rust Developer",   nameKo: "Rust 개발자",     title: "Rust Performance Expert",   titleKo: "Rust 최적화 에이전트",      initial: "Rs", color: "#E84118" },
+  "node-developer":   { name: "Node.js Developer", nameKo: "Node.js 개발자", title: "Node.js Performance Expert", titleKo: "Node.js 최적화 에이전트",  initial: "Nd", color: "#55EFC4" },
+  "swift-developer":  { name: "Swift Developer",  nameKo: "Swift 개발자",    title: "Swift Performance Expert",  titleKo: "Swift 최적화 에이전트",     initial: "Sw", color: "#F05138" },
+  "cpp-developer":    { name: "C/C++ Developer",  nameKo: "C/C++ 개발자",    title: "C/C++ Performance Expert",  titleKo: "C/C++ 최적화 에이전트",     initial: "Cp", color: "#659AD2" },
+  "aws-architect":    { name: "AWS Architect",    nameKo: "AWS 아키텍트",    title: "AWS Cloud Expert",          titleKo: "AWS 클라우드 에이전트",     initial: "Aw", color: "#FF9900" },
+  "k8s-developer":    { name: "K8s Developer",    nameKo: "K8s 개발자",      title: "Kubernetes Expert",         titleKo: "K8s 오케스트레이션 에이전트", initial: "K8", color: "#326CE5" },
+  "iac-developer":    { name: "IaC Developer",    nameKo: "IaC 개발자",      title: "Infrastructure as Code Expert", titleKo: "IaC 에이전트",          initial: "Ia", color: "#7B42BC" },
+  "observability-developer": { name: "Observability Engineer", nameKo: "옵저버빌리티 엔지니어", title: "Observability Expert", titleKo: "옵저버빌리티 에이전트", initial: "Ob", color: "#E6522C" },
+  "cicd-developer":   { name: "CI/CD Engineer",   nameKo: "CI/CD 엔지니어",  title: "CI/CD Pipeline Expert",     titleKo: "CI/CD 에이전트",            initial: "CI", color: "#2088FF" },
+  "docker-developer": { name: "Docker Developer", nameKo: "Docker 개발자",   title: "Container Expert",          titleKo: "컨테이너 에이전트",         initial: "Dk", color: "#2496ED" },
+  "system-designer":  { name: "System Designer",  nameKo: "시스템 디자이너",  title: "Large-Scale System Design Expert", titleKo: "시스템 설계 에이전트",  initial: "Sd", color: "#1ABC9C" },
+  "performance-detective": { name: "Performance Detective", nameKo: "성능 탐정", title: "Performance Detection Expert", titleKo: "성능 탐지 에이전트",   initial: "Pd", color: "#E74C3C" },
+  "sre-engineer":     { name: "SRE Engineer",     nameKo: "SRE 엔지니어",    title: "Site Reliability Expert",   titleKo: "SRE 안정성 에이전트",       initial: "Sr", color: "#2ECC71" },
 };
 
 const BIZ_META: Record<string, PersonaMeta> = {

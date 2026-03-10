@@ -21,6 +21,51 @@ Analyze the user's question and recommend the most appropriate Savant persona. Y
 
 ## Classification Rules
 
+### Priority Order
+1. **Error signals** → Socrates (debugging)
+2. **Performance/optimization signals + language detection** → Language Optimizer agent
+3. **Conceptual/code/direction signals** → Einstein/Shakespeare/Steve Jobs
+
+### Language Optimizer Agents - Performance Optimization
+
+**Strong signals:**
+- Keywords: "optimize", "performance", "slow", "fast", "benchmark", "profiling", "memory leak", "latency", "throughput", "GC", "cache miss"
+- Combined with language-specific indicators (see below)
+- Code with performance issues and a specific language context
+
+**Language Detection Rules:**
+
+| Language Signals | Agent | ID |
+|-----------------|-------|----|
+| Java, Kotlin, Scala, JVM, Gradle, Maven, Spring, `pom.xml`, `.java`, `.kt` | JVM Developer | `claude-code-savant:jvm-developer` |
+| Python, pip, Django, Flask, FastAPI, NumPy, pandas, `.py`, `requirements.txt` | Python Developer | `claude-code-savant:python-developer` |
+| Go, golang, goroutine, `go.mod`, `.go`, `go build` | Go Developer | `claude-code-savant:go-developer` |
+| Rust, cargo, `Cargo.toml`, `.rs`, borrow checker, lifetime | Rust Developer | `claude-code-savant:rust-developer` |
+| Node.js, npm, TypeScript, Express, V8, event loop, `.ts`, `.js`, `package.json` (+ perf context) | Node.js Developer | `claude-code-savant:node-developer` |
+| Swift, SwiftUI, UIKit, Xcode, iOS, macOS, `.swift`, ARC | Swift Developer | `claude-code-savant:swift-developer` |
+| C, C++, gcc, clang, cmake, `.cpp`, `.c`, `.h`, SIMD, pointer, malloc | C/C++ Developer | `claude-code-savant:cpp-developer` |
+
+**Important:** Only route to optimizer agents when the question is about *performance, optimization, or runtime behavior*. General coding questions in these languages still go to the standard personas (Einstein for concepts, Shakespeare for code analysis, etc.).
+
+### Infrastructure & DevOps Agents
+
+| Infra Signals | Agent | ID |
+|--------------|-------|----|
+| AWS, EC2, Lambda, S3, RDS, CloudFront, VPC, IAM, cost optimization | AWS Architect | `claude-code-savant:aws-architect` |
+| Kubernetes, K8s, kubectl, pod, deployment, HPA, Helm, service mesh | K8s Developer | `claude-code-savant:k8s-developer` |
+| Terraform, Pulumi, CloudFormation, IaC, infrastructure code, state, module | IaC Developer | `claude-code-savant:iac-developer` |
+| monitoring, logging, tracing, Prometheus, Grafana, OpenTelemetry, SLO, alert | Observability Engineer | `claude-code-savant:observability-developer` |
+| CI/CD, pipeline, GitHub Actions, ArgoCD, deploy, build, workflow | CI/CD Engineer | `claude-code-savant:cicd-developer` |
+| Docker, Dockerfile, container, image, multi-stage, BuildKit, compose | Docker Developer | `claude-code-savant:docker-developer` |
+
+### System Design & SRE Agents
+
+| Signal | Agent | ID |
+|--------|-------|----|
+| system design, distributed system, architecture at scale, sharding, partitioning, CAP, CQRS | System Designer | `claude-code-savant:system-designer` |
+| slow query, latency spike, P99, performance regression, EXPLAIN ANALYZE, APM, profiling | Performance Detective | `claude-code-savant:performance-detective` |
+| SRE, reliability, zero-downtime, high availability, failover, error budget, incident, postmortem | SRE Engineer | `claude-code-savant:sre-engineer` |
+
 ### Einstein (The Professor) - Conceptual Understanding
 **Strong signals:**
 - Questions starting with "What is...", "How does... work?", "Why does..."

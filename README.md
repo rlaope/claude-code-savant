@@ -1,6 +1,6 @@
 # claude-code-savant
 
-A Claude Code plugin with 5 expert personas and 14 business domain agents that give AI responses unique character and domain expertise. Includes a web chat UI with local Claude Code integration — no API keys needed.
+A Claude Code plugin with 5 expert personas, 16 dev specialist agents, and 14 business domain agents that give AI responses unique character and domain expertise. Includes a web chat UI with local Claude Code integration — no API keys needed.
 
 ![](./assets/savant.png)
 
@@ -243,17 +243,49 @@ The Smart Router will:
 | `/savant-new` | Steve Jobs | Project vision and next-step ideas |
 | `/savant-fix` | Socrates | Error analysis, root cause debugging |
 | `/savant-biz` | SayNo | Business strategy, monetization, P&L analysis |
+| `/savant-jvm` | JVM Developer | JVM performance optimization (GC, JIT, memory) |
+| `/savant-python` | Python Developer | Python performance optimization (GIL, asyncio, vectorization) |
+| `/savant-go` | Go Developer | Go performance optimization (goroutines, escape analysis) |
+| `/savant-rust` | Rust Developer | Rust performance optimization (ownership, zero-cost abstractions) |
+| `/savant-node` | Node.js Developer | Node.js performance optimization (event loop, V8) |
+| `/savant-swift` | Swift Developer | Swift performance optimization (ARC, value types) |
+| `/savant-cpp` | C/C++ Developer | C/C++ performance optimization (cache, SIMD, memory) |
+| `/savant-aws` | AWS Architect | AWS cloud architecture and cost optimization |
+| `/savant-k8s` | K8s Developer | Kubernetes orchestration and troubleshooting |
+| `/savant-iac` | IaC Developer | Terraform/Pulumi infrastructure as code |
+| `/savant-observability` | Observability Engineer | Monitoring, tracing, SLO-based alerting |
+| `/savant-cicd` | CI/CD Engineer | Pipeline design, GitOps, deployment strategies |
+| `/savant-docker` | Docker Developer | Container optimization and security |
+| `/savant-system-design` | System Designer | Large-scale distributed system design |
+| `/savant-perf-detect` | Performance Detective | Slow query and latency spike investigation |
+| `/savant-sre` | SRE Engineer | Reliability, HA, zero-downtime deployments |
 | `/savant-update` | **Update** | Check for updates and upgrade |
 
 ### Direct Agent Calls
 
 ```
-claude-code-savant:router       # Smart question analyzer (uses Opus)
-claude-code-savant:einstein     # First principles explanations
-claude-code-savant:shakespeare  # Narrative with diagrams
-claude-code-savant:stevejobs    # Visionary direction and ideas
-claude-code-savant:socrates     # Error debugging and root cause analysis
-claude-code-savant:sayno        # Business strategy and monetization
+claude-code-savant:router           # Smart question analyzer (uses Opus)
+claude-code-savant:einstein         # First principles explanations
+claude-code-savant:shakespeare      # Narrative with diagrams
+claude-code-savant:stevejobs        # Visionary direction and ideas
+claude-code-savant:socrates         # Error debugging and root cause analysis
+claude-code-savant:sayno            # Business strategy and monetization
+claude-code-savant:jvm-developer    # JVM performance optimization
+claude-code-savant:python-developer # Python performance optimization
+claude-code-savant:go-developer     # Go performance optimization
+claude-code-savant:rust-developer   # Rust performance optimization
+claude-code-savant:node-developer   # Node.js performance optimization
+claude-code-savant:swift-developer  # Swift performance optimization
+claude-code-savant:cpp-developer    # C/C++ performance optimization
+claude-code-savant:aws-architect    # AWS cloud architecture
+claude-code-savant:k8s-developer    # Kubernetes orchestration
+claude-code-savant:iac-developer    # Infrastructure as Code
+claude-code-savant:observability-developer # Observability & monitoring
+claude-code-savant:cicd-developer   # CI/CD pipeline design
+claude-code-savant:docker-developer # Container optimization
+claude-code-savant:system-designer  # Large-scale system design
+claude-code-savant:performance-detective # Performance detection
+claude-code-savant:sre-engineer     # Site reliability engineering
 ```
 
 ### Examples
@@ -316,6 +348,45 @@ function fibonacci(n) {
 - **Output**: Financial tables, unit economics, break-even analysis
 - **Use when**: You need monetization strategy, business planning, or financial projections
 - **Gateway**: SayNo also serves as the entry point to all business domain agents
+
+## Language Optimizer Agents
+
+7 language-specific performance optimization agents that provide runtime-level insights, profiling analysis, and benchmark-backed recommendations.
+
+| Agent | Focus | Key Expertise |
+|-------|-------|---------------|
+| **JVM Developer** | Java/Kotlin/Scala | GC tuning, JIT compilation, virtual threads, memory layout |
+| **Python Developer** | Python | GIL management, asyncio, vectorization, Cython, profiling |
+| **Go Developer** | Go | Goroutines, escape analysis, pprof, GOGC/GOMEMLIMIT |
+| **Rust Developer** | Rust | Ownership patterns, zero-cost abstractions, LLVM, unsafe |
+| **Node.js Developer** | Node.js/TypeScript | Event loop, V8 internals, Worker threads, streaming |
+| **Swift Developer** | Swift | ARC optimization, value types, Instruments, Swift concurrency |
+| **C/C++ Developer** | C/C++ | Cache optimization, SIMD, RAII, memory pools, compiler flags |
+
+Each agent follows the same pattern: **profile first, measure before and after, explain at the runtime level, prioritize by impact**.
+
+## Infrastructure & DevOps Agents
+
+6 infrastructure agents for cloud architecture, orchestration, and deployment automation.
+
+| Agent | Focus | Key Expertise |
+|-------|-------|---------------|
+| **AWS Architect** | AWS Cloud | Service selection, cost optimization, Well-Architected Framework |
+| **K8s Developer** | Kubernetes | Orchestration, scaling, networking, troubleshooting |
+| **IaC Developer** | Terraform/Pulumi | Module design, state management, CI/CD integration |
+| **Observability Engineer** | Monitoring | Prometheus, Grafana, OpenTelemetry, SLO-based alerting |
+| **CI/CD Engineer** | Pipelines | GitHub Actions, ArgoCD, GitOps, deployment strategies |
+| **Docker Developer** | Containers | Image optimization, multi-stage builds, security hardening |
+
+## System Design & SRE Agents
+
+3 SRE-level agents for large-scale architecture, performance investigation, and reliability engineering.
+
+| Agent | Focus | Key Expertise |
+|-------|-------|---------------|
+| **System Designer** | Large-Scale Design | Distributed architecture, CAP, sharding, capacity planning |
+| **Performance Detective** | Performance Detection | Slow queries, latency spikes, APM, root cause analysis |
+| **SRE Engineer** | Reliability | Zero-downtime deploy, HA, error budgets, incident response |
 
 ## Business Domain Agents
 
@@ -410,7 +481,7 @@ claude-code-savant/
 │   └── plugin.json           # Plugin manifest
 ├── agents/
 │   ├── router.md             # Smart Router (question analyzer)
-│   ├── dev/                  # Dev personas (5 agents)
+│   ├── dev/                  # Dev personas (21 agents)
 │   │   ├── einstein/
 │   │   │   ├── persona.md    # Identity, How You Think, Language Style
 │   │   │   ├── templates.md  # Response structure templates
@@ -418,7 +489,23 @@ claude-code-savant/
 │   │   ├── shakespeare/      # (same structure)
 │   │   ├── socrates/         # (same structure)
 │   │   ├── stevejobs/        # (same structure)
-│   │   └── sayno/            # (same structure)
+│   │   ├── sayno/            # (same structure)
+│   │   ├── jvm-developer/    # JVM Performance Expert
+│   │   ├── python-developer/ # Python Performance Expert
+│   │   ├── go-developer/     # Go Performance Expert
+│   │   ├── rust-developer/   # Rust Performance Expert
+│   │   ├── node-developer/   # Node.js Performance Expert
+│   │   ├── swift-developer/  # Swift Performance Expert
+│   │   ├── cpp-developer/    # C/C++ Performance Expert
+│   │   ├── aws-architect/    # AWS Cloud Expert
+│   │   ├── k8s-developer/    # Kubernetes Expert
+│   │   ├── iac-developer/    # Infrastructure as Code Expert
+│   │   ├── observability-developer/ # Observability Expert
+│   │   ├── cicd-developer/   # CI/CD Pipeline Expert
+│   │   ├── docker-developer/ # Container Expert
+│   │   ├── system-designer/  # System Design Expert
+│   │   ├── performance-detective/ # Performance Detection Expert
+│   │   └── sre-engineer/     # Site Reliability Expert
 │   └── biz/                  # Business domain agents (14 agents)
 │       ├── finance/
 │       │   ├── persona.md    # Domain expertise + Korean market
