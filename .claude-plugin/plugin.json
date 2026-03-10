@@ -1,7 +1,7 @@
 {
   "name": "claude-code-savant",
-  "version": "1.0.0",
-  "description": "Code analysis with distinctive personas - Shakespeare for narrative flow diagrams, Einstein for first principles complexity analysis",
+  "version": "1.6.0",
+  "description": "5 core personas, 16 dev specialist agents (language optimizers, infra/DevOps, SRE), and 14 business domain agents with distinctive character and expertise",
   "author": {
     "name": "rlaope"
   },
@@ -14,9 +14,10 @@
     "stevejobs",
     "socrates",
     "router",
-    "flowchart",
-    "complexity",
-    "vision",
-    "debugging"
+    "optimization",
+    "infrastructure",
+    "sre",
+    "devops",
+    "business"
   ]
 }
