@@ -394,6 +394,8 @@ SayNo is the gateway to **14 specialized business domain agents** covering Finan
 
 Each agent provides data-driven analysis with Korean market expertise (한국 시장). Activate only the ones you need in the Savant Chat sidebar.
 
+**Dynamic Benchmarks**: When specific numbers are needed (KPIs, market size, growth rates), agents automatically search the web for the latest data with source citations — no more stale benchmarks.
+
 > **[Full Business Agents Documentation →](./docs/business-agents.md)** — commands, examples, and detailed descriptions for all 14 domain agents.
 
 ## Savant Chat (Web UI)

@@ -53,6 +53,7 @@ Use slash commands to access any business agent directly:
 2. **Toggle domain agents** on/off in the Savant Chat sidebar → "Manage" button
 3. **Biz Team Chat** — activated business agents discuss your question together
 4. Each agent provides analysis with Korean market context (한국 시장)
+5. **Dynamic Benchmarks** — when specific numbers are needed, agents search the web for the latest data with source citations
 
 ### Activation
 
