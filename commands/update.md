@@ -8,74 +8,98 @@ $ARGUMENTS
 
 ## Your Task
 
-Check for updates and help user upgrade to the latest version.
+Check for updates and upgrade claude-code-savant to the latest version using git pull.
 
-## Step 1: Fetch Latest Version from GitHub
+## Step 1: Find Plugin Directory
 
-Use WebFetch to check the latest version:
+The plugin is installed as a local git clone. Find the directory:
 
-```
-WebFetch:
-- url: "https://raw.githubusercontent.com/rlaope/claude-code-savant/master/package.json"
-- prompt: "What is the version number?"
-```
-
-## Step 2: Show Update Information
-
-### If Update Available
-
-```
-## 🔄 Savant Update Available!
-
-**Your Version**: [current]
-**Latest Version**: [from GitHub]
-
-### How to Update:
-
-# Re-add marketplace to refresh
-/plugin marketplace add rlaope/claude-code-savant
-
-# Then reinstall
-/plugin uninstall claude-code-savant
-/plugin install claude-code-savant
-
-### After Update:
-Run `/savant-setup` to configure new features!
+```bash
+# The plugin directory is where this command file lives
+PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ```
 
-### If Already Latest
-
+Use Bash to run:
 ```
-## ✅ You're Up to Date!
-
-**Current Version**: [version] (Latest)
-
-No updates available.
+cd <plugin-directory> && git remote -v
 ```
 
-## Current Version Info
+Verify it's a git repo pointing to `rlaope/claude-code-savant`.
 
-**Latest Version: 1.3.0**
+## Step 2: Check Current Version
 
-### What's New in 1.3.0:
-- 🔧 **Dynamic TypeScript Agents**: Context-aware prompt generation
-- 📦 **MCP Server Support**: `.mcp.json` integration
+Read `package.json` in the plugin directory to get the current version.
 
-### What's in 1.2.0:
-- 🎭 **Smart Router**: Auto-detect best persona with `/savant`
-- 🌍 **Multi-language**: English, 한국어, 日本語, 中文 support
-- ⚡ **Default Mode**: Always-on routing with `/savant-default`
-- 🧙 **Setup Wizard**: First-time configuration
+## Step 3: Fetch Latest and Compare
 
-## Version History
+Run these commands in the plugin directory:
 
-| Version | Features |
-|---------|----------|
-| 1.3.0 | Dynamic TypeScript Agents, MCP Server |
-| 1.2.0 | Smart Router, Default Mode, Multi-language, Setup Wizard |
-| 1.1.0 | Steve Jobs & Socrates personas |
-| 1.0.0 | Einstein & Shakespeare personas |
+```bash
+git fetch origin master
+```
 
-## GitHub Repository
+Then check if there are updates:
 
-https://github.com/rlaope/claude-code-savant
+```bash
+git log HEAD..origin/master --oneline
+```
+
+### If No Updates
+
+Report:
+```
+## ✅ Already up to date!
+
+**Current Version**: [version]
+No new commits on origin/master.
+```
+
+Stop here.
+
+### If Updates Available
+
+Show the user what's coming:
+```
+## 🔄 Update Available!
+
+**Current Version**: [current version]
+**New commits**:
+[list of commits from git log]
+```
+
+## Step 4: Pull and Rebuild
+
+Ask the user for confirmation, then:
+
+```bash
+git pull origin master && npx tsc
+```
+
+## Step 5: Verify
+
+Read the updated `package.json` to confirm the new version.
+
+Report:
+```
+## ✅ Updated Successfully!
+
+**Previous Version**: [old]
+**New Version**: [new]
+
+Restart Claude Code to use the new version.
+```
+
+## Step 6: If Web UI is Running
+
+If the Savant Chat web UI was running, remind the user:
+
+```
+💡 If Savant Chat was running, restart it:
+   lsof -ti:3456 | xargs kill -9 2>/dev/null; npm run chat
+```
+
+## Error Handling
+
+- **Not a git repo**: Tell user to clone from `https://github.com/rlaope/claude-code-savant`
+- **Merge conflicts**: Run `git stash && git pull origin master && git stash pop`
+- **Build fails**: Run `npx tsc` again and report errors
