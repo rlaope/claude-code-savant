@@ -46,12 +46,21 @@ git log HEAD..origin/master --oneline
 
 ### If No Updates
 
+Also run:
+
+```bash
+git log --oneline -10
+```
+
 Report:
 ```
 ## ✅ Already up to date!
 
 **Current Version**: [version]
 No new commits on origin/master.
+
+### 📋 Recent Activity
+[list of recent 10 commits from git log]
 ```
 
 Stop here.
