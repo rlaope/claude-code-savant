@@ -488,6 +488,18 @@
     </div>
   </div>
 
+  <!-- Dev Agent Manager Modal -->
+  <div class="modal-overlay hidden" id="devModal">
+    <div class="modal" style="max-width:680px;">
+      <h2 id="devModalTitle" style="margin-bottom:4px;">Dev Specialist Agents</h2>
+      <p id="devModalDesc">Activate the specialist agents you need. Core personas (Einstein, Shakespeare, Socrates, Steve Jobs) are always on.</p>
+      <div id="devAgentList" style="max-height:450px; overflow-y:auto; margin-bottom:16px;"></div>
+      <div class="btn-row">
+        <button class="primary" onclick="closeDevModal()" style="flex:1;">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Context Panel -->
   <div class="context-overlay" id="contextOverlay" onclick="closeContext()"></div>
   <div class="context-panel" id="contextPanel">
@@ -601,6 +613,26 @@ function isBizEnabled(id) {
 }
 function getActiveBizIds() {
   return personas.filter(p => p.category === 'biz' && isBizEnabled(p.id)).map(p => p.id);
+}
+
+// Dev specialist agent activation state (localStorage)
+const CORE_DEV_IDS = ['einstein', 'shakespeare', 'socrates', 'stevejobs'];
+function isCoreDev(id) { return CORE_DEV_IDS.includes(id); }
+function getDevEnabled() {
+  try { return JSON.parse(localStorage.getItem('savant-dev-enabled') || '{}'); } catch { return {}; }
+}
+function setDevEnabled(id, on) {
+  const state = getDevEnabled();
+  state[id] = on;
+  localStorage.setItem('savant-dev-enabled', JSON.stringify(state));
+}
+function isDevEnabled(id) {
+  if (isCoreDev(id)) return true; // Core 4 always on
+  const state = getDevEnabled();
+  return state[id] === true;
+}
+function getActiveDevIds() {
+  return personas.filter(p => p.category === 'dev' && isDevEnabled(p.id)).map(p => p.id);
 }
 
 const providerNames = { local: 'Claude Code', anthropic: 'Claude', openai: 'GPT', gemini: 'Gemini' };
@@ -724,11 +756,15 @@ function renderPersonaList() {
   const bizPersonas = personas.filter(p => p.category === 'biz');
 
   // Dev section
+  const devManageBtn = `<span onclick="event.stopPropagation(); openDevModal()" style="font-size:10px; color:var(--muted); cursor:pointer; padding:2px 6px; border-radius:4px; background:#f0f0f0;">${lang === 'ko' ? '관리' : 'Manage'}</span>`;
   const devHeader = `<div class="category-header" onclick="toggleCategory('dev')">
-    <span class="label">${t('devSection')}</span><span class="arrow">▼</span>
+    <span class="label">${t('devSection')}</span>
+    <span style="display:flex;align-items:center;gap:6px;">${devManageBtn}<span class="arrow">▼</span></span>
   </div>`;
 
-  const devItems = devPersonas.map(p => `
+  // Only show core devs + activated specialist devs in sidebar
+  const activeDevPersonas = devPersonas.filter(p => isCoreDev(p.id) || isDevEnabled(p.id));
+  const devItems = activeDevPersonas.map(p => `
     <div class="persona-item ${activeChat === p.id ? 'active' : ''}"
          onclick="selectChat('${p.id}')" id="chat-${p.id}">
       <div class="avatar" style="background:${p.color}">${p.initial}</div>
@@ -856,6 +892,48 @@ function toggleBizModal(id) {
 
 function closeBizModal() {
   document.getElementById('bizModal').classList.add('hidden');
+}
+
+function openDevModal() {
+  const devPersonas = personas.filter(p => p.category === 'dev');
+  document.getElementById('devModalTitle').textContent =
+    lang === 'ko' ? '개발 에이전트 관리' : 'Manage Dev Specialist Agents';
+  document.getElementById('devModalDesc').textContent =
+    lang === 'ko' ? '필요한 전문 에이전트를 활성화하세요. 코어 페르소나(Einstein, Shakespeare, Socrates, Steve Jobs)는 항상 켜져 있습니다.' : 'Activate the specialist agents you need. Core personas (Einstein, Shakespeare, Socrates, Steve Jobs) are always on.';
+
+  const chipsHtml = devPersonas.map(p => {
+    const isCore = isCoreDev(p.id);
+    const enabled = isDevEnabled(p.id);
+    const chipClass = (enabled || isCore) ? 'biz-chip active' : 'biz-chip inactive';
+    const clickAction = isCore ? '' : `onclick="toggleDevModal('${p.id}')"`;
+    const coreBadge = isCore ? `<span class="gateway-badge">CORE</span>` : '';
+    const name = lang === 'ko' ? p.nameKo : p.name;
+    const desc = lang === 'ko' ? p.titleKo : p.title;
+    return `
+      <div class="${chipClass}" ${clickAction} style="${isCore ? 'cursor:default;' : ''}">
+        <div class="chip-avatar" style="background:${p.color}">${p.initial}</div>
+        <div class="chip-name">${name}</div>
+        <div class="chip-desc">${desc}</div>
+        ${coreBadge}
+      </div>`;
+  }).join('');
+
+  document.getElementById('devAgentList').innerHTML = `<div class="biz-chip-grid">${chipsHtml}</div>`;
+  document.getElementById('devModal').classList.remove('hidden');
+}
+
+function toggleDevModal(id) {
+  const current = isDevEnabled(id);
+  setDevEnabled(id, !current);
+  if (current && activeChat === id) {
+    selectChat('einstein');
+  }
+  openDevModal(); // re-render modal
+  renderPersonaList();
+}
+
+function closeDevModal() {
+  document.getElementById('devModal').classList.add('hidden');
 }
 
 function selectChat(id) {
