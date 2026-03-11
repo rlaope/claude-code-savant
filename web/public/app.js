@@ -2,12 +2,15 @@
 let personas = [];
 let activeChat = null; // personaId or 'group' or 'biz-group'
 let chatHistories = JSON.parse(localStorage.getItem('savant-chat-histories') || '{}');
-// Clean up empty/error assistant messages from interrupted sessions
+// Clean up error messages but keep empty assistant messages if there's an active response
+const hasActiveResponse = !!sessionStorage.getItem('savant-active-response');
 for (const [key, msgs] of Object.entries(chatHistories)) {
   chatHistories[key] = msgs.filter(m => {
     if (m.role !== 'assistant') return true;
-    if (!m.content) return false;
-    if (/\*\*Error\*\*:\s*(network|abort|fetch|failed to fetch)/i.test(m.content)) return false;
+    // Remove network error messages
+    if (m.content && /\*\*Error\*\*:\s*(network|abort|fetch|failed to fetch)/i.test(m.content)) return false;
+    // Only remove empty assistant messages if no active response (safe to clean)
+    if (!m.content && !hasActiveResponse) return false;
     return true;
   });
 }
@@ -244,8 +247,10 @@ async function resumeActiveResponse() {
     renderMessages();
   } catch (err) {
     sessionStorage.removeItem('savant-active-response');
+    saveChatHistories(); // Always save whatever we have
     isStreaming = false;
     processingChat = null;
+    if (activeChat === chat) renderMessages();
   }
 }
 
@@ -568,10 +573,12 @@ function renderMessages() {
     const isLastMsg = idx === history.length - 1;
     const isInProgress = isLastMsg && processingChat === activeChat && msg.role === 'assistant';
     if (!msg.content && !isInProgress) return '';
+    // If in-progress but no content yet, skip — the typing indicator below handles it
+    if (isInProgress && !msg.content) return '';
     if (isInProgress) {
       return `<div class="message-row assistant">
         <div ${avStyle2}>${avText2}</div>
-        <div class="bubble" id="streaming-bubble">${msg.content ? marked.parse(msg.content, { breaks: true }) : ''}</div>
+        <div class="bubble" id="streaming-bubble">${marked.parse(msg.content, { breaks: true })}</div>
       </div>`;
     }
     return `<div class="message-row assistant">
@@ -591,7 +598,7 @@ function renderMessages() {
       typingRow.innerHTML = `<div ${avStyle2}>${avText2}</div>
         <div class="bubble">
           <div class="typing-indicator"><span></span><span></span><span></span></div>
-          <div class="thinking-status"></div>
+          <div class="thinking-status" id="thinkingStatus"></div>
         </div>`;
       container.appendChild(typingRow);
     }
@@ -784,9 +791,17 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
     document.getElementById('headerStatus').textContent = t('typing');
   }
 
+  // Show initial connection status for local provider
   if (chatProvider === 'local' && activeChat === targetChat) {
     const statusEl = document.getElementById('thinkingStatus');
     if (statusEl) statusEl.textContent = chatLang === 'ko' ? 'Claude Code 연결 중...' : 'Connecting to Claude Code...';
+  }
+
+  // Show input usage bar as "processing"
+  const iub = document.getElementById('inputUsageBar');
+  if (iub) {
+    iub.className = 'input-usage-bar streaming';
+    iub.innerHTML = `<span>${chatLang === 'ko' ? '처리 중...' : 'Processing...'}</span><div class="iub-bar-wrap"><div class="iub-bar" style="width:5%"></div></div>`;
   }
 
   const isBizGroup = targetChat === 'biz-group';
@@ -850,26 +865,23 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
     }
 
     function updateStreamingUsage(usage, estimatedOut) {
-      const bubble = document.getElementById('streaming-bubble');
-      if (!bubble) return;
-      let el = document.getElementById('streaming-usage');
-      if (!el) {
-        el = document.createElement('div');
-        el.id = 'streaming-usage';
-        el.className = 'token-usage streaming';
-        bubble.after(el);
-      }
       const inp = usage?.input_tokens || usage?.input || 0;
       const out = usage?.output_tokens || usage?.output || estimatedOut || 0;
       const maxTokens = 4096;
       const pct = Math.min(100, Math.round((out / maxTokens) * 100));
       const label = inp ? `${inp.toLocaleString()} in · ${out.toLocaleString()} out` : `~${out.toLocaleString()} tokens`;
-      el.innerHTML = `<span class="usage-text">${label}</span>`
-        + `<div class="usage-bar-wrap"><div class="usage-bar" style="width:${pct}%"></div></div>`;
+
+      // Update input area usage bar (always visible)
+      const iub = document.getElementById('inputUsageBar');
+      if (iub) {
+        iub.className = 'input-usage-bar streaming';
+        iub.innerHTML = `<span>${label}</span><div class="iub-bar-wrap"><div class="iub-bar" style="width:${pct}%"></div></div>`;
+      }
     }
 
     function ensureBubble() {
-      if (bubbleReady || activeChat !== targetChat) return;
+      if (bubbleReady) return;
+      if (activeChat !== targetChat) return; // can't create DOM for invisible chat
       if (typingEl) typingEl.remove();
       bubbleReady = true;
       const msgRow = document.createElement('div');
@@ -877,6 +889,22 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
       msgRow.innerHTML = `<div ${avStyle}>${avText}</div>
         <div class="bubble" id="streaming-bubble"></div>`;
       container.appendChild(msgRow);
+    }
+
+    function renderBubbleContent() {
+      // If user is on the target chat, update the streaming bubble
+      if (activeChat !== targetChat) return;
+      let bubble = document.getElementById('streaming-bubble');
+      if (!bubble) {
+        // User switched back — re-render to create the bubble
+        renderMessages();
+        bubble = document.getElementById('streaming-bubble');
+      }
+      if (bubble) {
+        bubble.innerHTML = marked.parse(assistantText, { breaks: true });
+        bubble.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        scrollToBottom();
+      }
     }
 
     while (true) {
@@ -893,12 +921,10 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
         try {
           const parsed = JSON.parse(data);
           if (parsed.responseId) {
-            // Server sent response ID for resume capability
             sessionStorage.setItem('savant-active-response', JSON.stringify({
               id: parsed.responseId, chat: targetChat
             }));
           } else if (parsed.status !== undefined) {
-            // Server-sent status update (local provider thinking phase)
             const statusEl = document.getElementById('thinkingStatus');
             if (statusEl) {
               if (parsed.status === '') {
@@ -923,47 +949,35 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
             assistantText += `\n\n**Error**: ${parsed.error}`;
           } else if (parsed.usage) {
             usageData = { ...usageData, ...parsed.usage };
-            updateStreamingUsage(usageData, null);
+            if (activeChat === targetChat) updateStreamingUsage(usageData, null);
           } else if (parsed.text) {
             ensureBubble();
             assistantText += parsed.text;
-            // Estimate ~1 token per 4 chars, update progress bar in real-time
-            const estTokens = Math.round(assistantText.length / 4);
-            updateStreamingUsage(usageData, estTokens);
+            if (activeChat === targetChat) {
+              const estTokens = Math.round(assistantText.length / 4);
+              updateStreamingUsage(usageData, estTokens);
+            }
           }
         } catch {}
       }
 
-      // Update history in real-time so chat switching preserves progress
+      // Always update history so chat switching preserves progress
       history[history.length - 1].content = assistantText;
-      // Periodically save to localStorage so refresh preserves partial responses
-      if (assistantText.length % 200 < 50) saveChatHistories();
+      saveChatHistories();
 
-      const bubble = document.getElementById('streaming-bubble');
-      if (bubble && activeChat === targetChat) {
-        bubble.innerHTML = marked.parse(assistantText, { breaks: true });
-        bubble.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-        scrollToBottom();
-      }
+      renderBubbleContent();
     }
 
-    // Show final token usage below the response
-    if (usageData && activeChat === targetChat) {
-      const bubble = document.getElementById('streaming-bubble');
-      if (bubble) {
-        // Remove streaming usage if exists
-        const existing = document.getElementById('streaming-usage');
-        if (existing) existing.remove();
-        const inp = usageData.input_tokens || usageData.input || 0;
-        const out = usageData.output_tokens || usageData.output || 0;
-        const maxTokens = 4096;
-        const pct = Math.min(100, Math.round((out / maxTokens) * 100));
-        const usageEl = document.createElement('div');
-        usageEl.className = 'token-usage';
-        usageEl.innerHTML = `<span class="usage-text">${inp.toLocaleString()} in · ${out.toLocaleString()} out</span>`
-          + `<div class="usage-bar-wrap"><div class="usage-bar" style="width:${pct}%"></div></div>`;
-        bubble.after(usageEl);
-      }
+    // Show final token usage in input area bar
+    const iub = document.getElementById('inputUsageBar');
+    if (iub) {
+      const inp = usageData?.input_tokens || usageData?.input || 0;
+      const out = usageData?.output_tokens || usageData?.output || Math.round(assistantText.length / 4);
+      const maxTokens = 4096;
+      const pct = Math.min(100, Math.round((out / maxTokens) * 100));
+      const label = inp ? `${inp.toLocaleString()} in · ${out.toLocaleString()} out` : `~${out.toLocaleString()} tokens`;
+      iub.className = 'input-usage-bar';
+      iub.innerHTML = `<span>${label}</span><div class="iub-bar-wrap"><div class="iub-bar" style="width:${pct}%"></div></div>`;
     }
 
     history[history.length - 1].content = assistantText;
@@ -981,13 +995,14 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
   } finally {
     isStreaming = false;
     processingChat = null;
+    // Always save history regardless of which chat is active
+    saveChatHistories();
     if (activeChat === targetChat) {
       const sp = personas.find(x => x.id === activeChat);
       const statusText = activeChat === 'biz-group' ? t('bizGroupTitle') : activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? sp?.titleKo : sp?.title);
       document.getElementById('headerStatus').textContent = statusText || '';
+      renderMessages();
     }
-    // If user switched to the completed chat, re-render to show the response
-    if (activeChat === targetChat) renderMessages();
     // Process next in queue
     if (messageQueue.length > 0) {
       const next = messageQueue.shift();

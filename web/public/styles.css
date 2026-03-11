@@ -287,6 +287,37 @@ body {
 
 /* ── Input ─────────────────────────── */
 .input-area { padding: 12px 20px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.input-usage-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  font-size: 11px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 0.3s ease;
+}
+.input-usage-bar.hidden { display: none; }
+.input-usage-bar.streaming { color: #666; }
+.input-usage-bar .iub-bar-wrap {
+  flex: 1;
+  max-width: 200px;
+  height: 3px;
+  background: #e8e8e8;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.input-usage-bar .iub-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7c7c7c, #555);
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.input-usage-bar.streaming .iub-bar {
+  background: linear-gradient(90deg, #aaa, #666);
+  animation: barPulse 1.5s ease-in-out infinite;
+}
 .input-wrapper {
   display: flex; align-items: flex-end; gap: 8px;
   background: #f8f8f8; border-radius: 14px;
