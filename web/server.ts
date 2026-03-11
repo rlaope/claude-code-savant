@@ -1,18 +1,42 @@
 import express from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 import cors from "cors";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
-import { execSync, spawn } from "child_process";
+import { execSync } from "child_process";
 
-type Provider = "local" | "anthropic" | "openai" | "gemini";
+import { Provider, PersonaInfo, PersonaCategory } from "./types.js";
+import {
+  PROVIDER_MODELS,
+  getApiKey,
+  formatApiError,
+  streamAnthropic,
+  streamOpenAI,
+  streamGemini,
+  streamLocal,
+} from "./providers.js";
+import {
+  CachedResponse,
+  responseCache,
+  incrementResponseIdCounter,
+  createCachedWriter,
+} from "./response-cache.js";
+import {
+  DEV_META,
+  BIZ_META,
+  loadPersonas,
+  loadMetaOverrides,
+  saveMetaOverrides,
+  applyOverrides,
+} from "./personas.js";
+import { scanProject, scanProjectLight } from "./project-scanner.js";
+import { PersonaMeta } from "./types.js";
 
 // Find claude CLI path
 function findClaudeCli(): string | null {
-  // Check common locations
   const candidates = [
     "claude",
     path.join(process.env.HOME || "", ".nvm/versions/node", process.version, "bin/claude"),
@@ -55,309 +79,11 @@ function detectProjectDir(): string {
 }
 const PROJECT_DIR = detectProjectDir();
 
-type PersonaCategory = "dev" | "biz";
-
-interface PersonaInfo {
-  id: string;
-  name: string;
-  nameKo: string;
-  title: string;
-  titleKo: string;
-  initial: string;
-  color: string;
-  category: PersonaCategory;
-  systemPrompt: string;
-  lightSystemPrompt: string;
-}
-
-type PersonaMeta = { name: string; nameKo: string; title: string; titleKo: string; initial: string; color: string };
-
-// ── Project Scanner ──────────────────────────────────────────────
-function scanProject(dir: string): string {
-  const lines: string[] = [];
-  lines.push(`# Project Context`);
-  lines.push(`**Working Directory**: \`${dir}\``);
-  lines.push(`**Project Name**: \`${path.basename(dir)}\``);
-
-  const pkgPath = path.join(dir, "package.json");
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      lines.push(`\n## Package Info`);
-      lines.push(`- **Name**: ${pkg.name || "unknown"}`);
-      lines.push(`- **Version**: ${pkg.version || "unknown"}`);
-      lines.push(`- **Description**: ${pkg.description || "none"}`);
-      if (pkg.scripts) lines.push(`- **Scripts**: ${Object.keys(pkg.scripts).join(", ")}`);
-      if (pkg.dependencies) lines.push(`- **Dependencies**: ${Object.keys(pkg.dependencies).join(", ")}`);
-      if (pkg.devDependencies) lines.push(`- **Dev Dependencies**: ${Object.keys(pkg.devDependencies).join(", ")}`);
-    } catch { /* ignore */ }
-  }
-
-  for (const f of ["pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"]) {
-    const fp = path.join(dir, f);
-    if (fs.existsSync(fp)) {
-      lines.push(`\n## Build Config: ${f}`);
-      const content = fs.readFileSync(fp, "utf-8");
-      lines.push("```\n" + content.slice(0, 2000) + "\n```");
-    }
-  }
-
-  const readmePath = path.join(dir, "README.md");
-  if (fs.existsSync(readmePath)) {
-    lines.push(`\n## README (excerpt)`);
-    lines.push(fs.readFileSync(readmePath, "utf-8").slice(0, 5000));
-  }
-
-  const claudeMdPath = path.join(dir, "CLAUDE.md");
-  if (fs.existsSync(claudeMdPath)) {
-    lines.push(`\n## CLAUDE.md (Project Instructions)`);
-    lines.push(fs.readFileSync(claudeMdPath, "utf-8").slice(0, 5000));
-  }
-
-  const agentsMdPath = path.join(dir, "AGENTS.md");
-  if (fs.existsSync(agentsMdPath)) {
-    lines.push(`\n## AGENTS.md (Agent Instructions)`);
-    lines.push(fs.readFileSync(agentsMdPath, "utf-8").slice(0, 3000));
-  }
-
-  const envExamplePath = path.join(dir, ".env.example");
-  if (fs.existsSync(envExamplePath)) {
-    lines.push(`\n## Environment Variables (.env.example)`);
-    lines.push("```\n" + fs.readFileSync(envExamplePath, "utf-8").slice(0, 1000) + "\n```");
-  }
-
-  lines.push(`\n## Directory Structure\n\`\`\``);
-  try { lines.push(buildTree(dir, 3)); } catch { lines.push("(could not read)"); }
-  lines.push("```");
-
-  try {
-    const branch = execSync("git branch --show-current", { cwd: dir, encoding: "utf-8" }).trim();
-    const log = execSync("git log --oneline -5", { cwd: dir, encoding: "utf-8" }).trim();
-    lines.push(`\n## Git Info\n- **Branch**: ${branch}\n- **Recent commits**:\n\`\`\`\n${log}\n\`\`\``);
-  } catch { /* not a git repo */ }
-
-  const srcDirs = ["src", "lib", "app", "pages", "components"];
-  for (const sd of srcDirs) {
-    const sdPath = path.join(dir, sd);
-    if (fs.existsSync(sdPath) && fs.statSync(sdPath).isDirectory()) {
-      lines.push(`\n## Key Source Files (${sd}/)`);
-      const sourceFiles = collectFiles(sdPath, 3).slice(0, 30);
-      for (const f of sourceFiles) {
-        lines.push(`- \`${path.relative(dir, f)}\` (${fs.statSync(f).size} bytes)`);
-      }
-      // Include content of top 5 source files (first 80 lines each)
-      const codeExts = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".vue", ".svelte"]);
-      const topFiles = sourceFiles.filter(f => codeExts.has(path.extname(f))).slice(0, 5);
-      for (const f of topFiles) {
-        try {
-          const content = fs.readFileSync(f, "utf-8").split("\n").slice(0, 80).join("\n");
-          lines.push(`\n### \`${path.relative(dir, f)}\` (preview)\n\`\`\`\n${content}\n\`\`\``);
-        } catch { /* skip unreadable */ }
-      }
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function scanProjectLight(dir: string): string {
-  const lines: string[] = [];
-  lines.push(`# Project Context`);
-  lines.push(`**Project Name**: \`${path.basename(dir)}\``);
-
-  const pkgPath = path.join(dir, "package.json");
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      lines.push(`- **Name**: ${pkg.name || "unknown"}`);
-      lines.push(`- **Version**: ${pkg.version || "unknown"}`);
-      lines.push(`- **Description**: ${pkg.description || "none"}`);
-    } catch { /* ignore */ }
-  }
-
-  lines.push(`\n## Directory Structure\n\`\`\``);
-  try { lines.push(buildTree(dir, 2)); } catch { lines.push("(could not read)"); }
-  lines.push("```");
-
-  try {
-    const branch = execSync("git branch --show-current", { cwd: dir, encoding: "utf-8" }).trim();
-    lines.push(`\n- **Branch**: ${branch}`);
-  } catch { /* not a git repo */ }
-
-  return lines.join("\n");
-}
-
-function buildTree(dir: string, maxDepth: number, depth = 0, prefix = ""): string {
-  if (depth >= maxDepth) return "";
-  const ignore = new Set(["node_modules", ".git", "dist", ".next", "__pycache__", ".venv", "target", "build", ".omc"]);
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-    .filter(e => !e.name.startsWith(".") || e.name === ".env.example")
-    .filter(e => !ignore.has(e.name))
-    .sort((a, b) => {
-      if (a.isDirectory() && !b.isDirectory()) return -1;
-      if (!a.isDirectory() && b.isDirectory()) return 1;
-      return a.name.localeCompare(b.name);
-    });
-  const lines: string[] = [];
-  entries.forEach((entry, i) => {
-    const isLast = i === entries.length - 1;
-    lines.push(`${prefix}${isLast ? "└── " : "├── "}${entry.isDirectory() ? "" : ""}${entry.name}`);
-    if (entry.isDirectory()) {
-      const sub = buildTree(path.join(dir, entry.name), maxDepth, depth + 1, prefix + (isLast ? "    " : "│   "));
-      if (sub) lines.push(sub);
-    }
-  });
-  return lines.join("\n");
-}
-
-function collectFiles(dir: string, maxDepth: number, depth = 0): string[] {
-  if (depth >= maxDepth) return [];
-  const ignore = new Set(["node_modules", ".git", "dist", "__pycache__", ".venv", "target"]);
-  const files: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (ignore.has(entry.name) || entry.name.startsWith(".")) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...collectFiles(full, maxDepth, depth + 1));
-    else files.push(full);
-  }
-  return files;
-}
-
-// ── Persona Loader ───────────────────────────────────────────────
-const DEV_META: Record<string, PersonaMeta> = {
-  einstein:    { name: "Einstein",    nameKo: "아인슈타인", title: "The Professor",  titleKo: "개념 정리 에이전트",     initial: "E", color: "#6C5CE7" },
-  shakespeare: { name: "Shakespeare", nameKo: "셰익스피어", title: "The Bard",       titleKo: "코드 분석 에이전트",     initial: "S", color: "#E17055" },
-  socrates:    { name: "Socrates",    nameKo: "소크라테스",  title: "The Debugger",   titleKo: "디버깅 에이전트",        initial: "So", color: "#00B894" },
-  stevejobs:   { name: "Steve Jobs",  nameKo: "스티브 잡스", title: "The Visionary",  titleKo: "방향 제시 에이전트",     initial: "J", color: "#0984E3" },
-  "jvm-developer":    { name: "JVM Developer",    nameKo: "JVM 개발자",      title: "JVM Performance Expert",    titleKo: "JVM 최적화 에이전트",       initial: "Jv", color: "#D63031" },
-  "python-developer": { name: "Python Developer", nameKo: "Python 개발자",   title: "Python Performance Expert", titleKo: "Python 최적화 에이전트",    initial: "Py", color: "#3776AB" },
-  "go-developer":     { name: "Go Developer",     nameKo: "Go 개발자",       title: "Go Performance Expert",     titleKo: "Go 최적화 에이전트",        initial: "Go", color: "#00ADD8" },
-  "rust-developer":   { name: "Rust Developer",   nameKo: "Rust 개발자",     title: "Rust Performance Expert",   titleKo: "Rust 최적화 에이전트",      initial: "Rs", color: "#E84118" },
-  "node-developer":   { name: "Node.js Developer", nameKo: "Node.js 개발자", title: "Node.js Performance Expert", titleKo: "Node.js 최적화 에이전트",  initial: "Nd", color: "#55EFC4" },
-  "swift-developer":  { name: "Swift Developer",  nameKo: "Swift 개발자",    title: "Swift Performance Expert",  titleKo: "Swift 최적화 에이전트",     initial: "Sw", color: "#F05138" },
-  "cpp-developer":    { name: "C/C++ Developer",  nameKo: "C/C++ 개발자",    title: "C/C++ Performance Expert",  titleKo: "C/C++ 최적화 에이전트",     initial: "Cp", color: "#659AD2" },
-  "aws-architect":    { name: "AWS Architect",    nameKo: "AWS 아키텍트",    title: "AWS Cloud Expert",          titleKo: "AWS 클라우드 에이전트",     initial: "Aw", color: "#FF9900" },
-  "k8s-developer":    { name: "K8s Developer",    nameKo: "K8s 개발자",      title: "Kubernetes Expert",         titleKo: "K8s 오케스트레이션 에이전트", initial: "K8", color: "#326CE5" },
-  "iac-developer":    { name: "IaC Developer",    nameKo: "IaC 개발자",      title: "Infrastructure as Code Expert", titleKo: "IaC 에이전트",          initial: "Ia", color: "#7B42BC" },
-  "observability-developer": { name: "Observability Engineer", nameKo: "옵저버빌리티 엔지니어", title: "Observability Expert", titleKo: "옵저버빌리티 에이전트", initial: "Ob", color: "#E6522C" },
-  "cicd-developer":   { name: "CI/CD Engineer",   nameKo: "CI/CD 엔지니어",  title: "CI/CD Pipeline Expert",     titleKo: "CI/CD 에이전트",            initial: "CI", color: "#2088FF" },
-  "docker-developer": { name: "Docker Developer", nameKo: "Docker 개발자",   title: "Container Expert",          titleKo: "컨테이너 에이전트",         initial: "Dk", color: "#2496ED" },
-  "system-designer":  { name: "System Designer",  nameKo: "시스템 디자이너",  title: "Large-Scale System Design Expert", titleKo: "시스템 설계 에이전트",  initial: "Sd", color: "#1ABC9C" },
-  "performance-detective": { name: "Performance Detective", nameKo: "성능 탐정", title: "Performance Detection Expert", titleKo: "성능 탐지 에이전트",   initial: "Pd", color: "#E74C3C" },
-  "sre-engineer":     { name: "SRE Engineer",     nameKo: "SRE 엔지니어",    title: "Site Reliability Expert",   titleKo: "SRE 안정성 에이전트",       initial: "Sr", color: "#2ECC71" },
-};
-
-const BIZ_META: Record<string, PersonaMeta> = {
-  sayno:     { name: "SayNo",            nameKo: "세이노",       title: "The Strategist",  titleKo: "사업/수익화 에이전트",  initial: "₩", color: "#F39C12" },
-  finance:   { name: "Finance PM",       nameKo: "파이낸스 PM",  title: "Investment & Finance", titleKo: "재무/투자 에이전트", initial: "F", color: "#8E44AD" },
-  growth:    { name: "Growth PM",        nameKo: "그로스 PM",    title: "Marketing & Growth",   titleKo: "마케팅/그로스 에이전트", initial: "G", color: "#27AE60" },
-  legal:     { name: "Legal Advisor",    nameKo: "법률 어드바이저", title: "Business Law",     titleKo: "법률/규제 에이전트",  initial: "L", color: "#2C3E50" },
-  fashion:   { name: "Fashion PM",       nameKo: "패션 PM",      title: "Fashion & Retail",     titleKo: "패션 사업 에이전트", initial: "Fa", color: "#E91E63" },
-  logistics: { name: "Logistics Manager", nameKo: "물류 매니저",  title: "Supply Chain & Ops",   titleKo: "물류/SCM 에이전트",  initial: "Lo", color: "#795548" },
-  fnb:       { name: "F&B PM",           nameKo: "F&B PM",       title: "Food & Beverage",      titleKo: "요식업 에이전트",    initial: "Fb", color: "#FF5722" },
-  saas:      { name: "SaaS PM",          nameKo: "SaaS PM",      title: "Software Business",    titleKo: "SaaS/플랫폼 에이전트", initial: "Sa", color: "#3F51B5" },
-  ecommerce: { name: "E-commerce PM",   nameKo: "이커머스 PM",  title: "Online Retail",        titleKo: "이커머스 에이전트",   initial: "Ec", color: "#FF9800" },
-  realestate:{ name: "Real Estate PM",  nameKo: "부동산 PM",    title: "Property & PropTech",   titleKo: "부동산 에이전트",     initial: "Re", color: "#607D8B" },
-  healthcare:{ name: "Healthcare PM",   nameKo: "헬스케어 PM",  title: "HealthTech",           titleKo: "헬스케어 에이전트",   initial: "He", color: "#4CAF50" },
-  content:   { name: "Content PM",      nameKo: "콘텐츠 PM",    title: "Media & Creator",      titleKo: "콘텐츠/미디어 에이전트", initial: "Co", color: "#9C27B0" },
-  hr:        { name: "HR PM",           nameKo: "HR PM",        title: "People & HRTech",      titleKo: "인사/채용 에이전트",  initial: "Hr", color: "#009688" },
-  education: { name: "Education PM",    nameKo: "교육 PM",      title: "EdTech & Learning",    titleKo: "교육/에듀테크 에이전트", initial: "Ed", color: "#673AB7" },
-  travel:    { name: "Travel PM",       nameKo: "여행 PM",      title: "Tourism & Hospitality", titleKo: "여행/관광 에이전트",  initial: "Tr", color: "#00BCD4" },
-};
-
-// ── Meta Overrides ───────────────────────────────────────────────
+// ── Persona Loading ───────────────────────────────────────────────
 const META_OVERRIDES_PATH = path.join(PERSONAS_DIR, "meta-overrides.json");
+const metaOverrides = loadMetaOverrides(META_OVERRIDES_PATH);
+const personas = loadPersonas(PERSONAS_DIR, metaOverrides);
 
-function loadMetaOverrides(): Record<string, Partial<PersonaMeta>> {
-  try {
-    if (fs.existsSync(META_OVERRIDES_PATH)) {
-      return JSON.parse(fs.readFileSync(META_OVERRIDES_PATH, "utf-8"));
-    }
-  } catch { /* ignore */ }
-  return {};
-}
-
-function saveMetaOverrides(overrides: Record<string, Partial<PersonaMeta>>): void {
-  fs.writeFileSync(META_OVERRIDES_PATH, JSON.stringify(overrides, null, 2), "utf-8");
-}
-
-const metaOverrides = loadMetaOverrides();
-
-// Apply overrides to meta objects
-function applyOverrides(id: string, meta: PersonaMeta): PersonaMeta {
-  const override = metaOverrides[id];
-  if (!override) return meta;
-  return { ...meta, ...override };
-}
-
-function loadPersonaFromFile(filePath: string): string | null {
-  if (!fs.existsSync(filePath)) return null;
-  const content = fs.readFileSync(filePath, "utf-8");
-  return content.replace(/^---[\s\S]*?---\n*/, "");
-}
-
-function loadPersonaFromDir(dirOrFile: string): string | null {
-  // If it's a file (e.g., router.md), load directly
-  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isFile()) {
-    return loadPersonaFromFile(dirOrFile);
-  }
-
-  // If it's a directory, load all .md files in order
-  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isDirectory()) {
-    const order = ['persona.md', 'templates.md', 'examples.md', 'benchmarks.md'];
-    const parts: string[] = [];
-
-    for (const filename of order) {
-      const filePath = path.join(dirOrFile, filename);
-      const content = loadPersonaFromFile(filePath);
-      if (content) parts.push(content);
-    }
-
-    return parts.length > 0 ? parts.join('\n\n---\n\n') : null;
-  }
-
-  return null;
-}
-
-function loadPersonaLightweight(dirOrFile: string): string | null {
-  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isFile()) {
-    return loadPersonaFromFile(dirOrFile);
-  }
-  if (fs.existsSync(dirOrFile) && fs.statSync(dirOrFile).isDirectory()) {
-    // Fast mode: only load persona.md (skip templates, examples, benchmarks)
-    const personaPath = path.join(dirOrFile, 'persona.md');
-    return loadPersonaFromFile(personaPath);
-  }
-  return null;
-}
-
-function loadPersonas(): Map<string, PersonaInfo> {
-  const result = new Map<string, PersonaInfo>();
-
-  // Dev agents from agents/dev/{id}/
-  for (const [id, info] of Object.entries(DEV_META)) {
-    const devDir = path.join(PERSONAS_DIR, "dev", id);
-    const prompt = loadPersonaFromDir(devDir);
-    const lightPrompt = loadPersonaLightweight(devDir);
-    const meta = applyOverrides(id, info);
-    if (prompt) result.set(id, { id, ...meta, category: "dev", systemPrompt: prompt, lightSystemPrompt: lightPrompt || prompt });
-  }
-
-  // Biz agents from agents/biz/{id}/ (sayno is now under agents/dev/sayno/)
-  for (const [id, info] of Object.entries(BIZ_META)) {
-    const dirPath = id === "sayno"
-      ? path.join(PERSONAS_DIR, "dev", id)
-      : path.join(PERSONAS_DIR, "biz", id);
-    const prompt = loadPersonaFromDir(dirPath);
-    const lightPrompt = loadPersonaLightweight(dirPath);
-    const meta = applyOverrides(id, info);
-    if (prompt) result.set(id, { id, ...meta, category: "biz", systemPrompt: prompt, lightSystemPrompt: lightPrompt || prompt });
-  }
-
-  return result;
-}
-
-const personas = loadPersonas();
 let projectContext = scanProject(PROJECT_DIR);
 let projectContextLight = scanProjectLight(PROJECT_DIR);
 
@@ -365,46 +91,7 @@ console.log(`\n  Project: ${path.basename(PROJECT_DIR)}`);
 console.log(`  Context: ${(projectContext.length / 1024).toFixed(1)}KB`);
 console.log(`  Claude CLI: ${claudeCliAvailable ? "available (default provider)" : "not found"}\n`);
 
-// ── Helpers ──────────────────────────────────────────────────────
-function formatApiError(raw: string): string {
-  if (raw.includes("credit balance is too low")) {
-    return "Anthropic API 크레딧이 부족합니다. https://console.anthropic.com/settings/plans 에서 충전해주세요.";
-  }
-  if (raw.includes("invalid x-api-key") || raw.includes("invalid api key")) {
-    return "API 키가 유효하지 않습니다. 키를 확인하고 다시 설정해주세요.";
-  }
-  if (raw.includes("rate limit")) {
-    return "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.";
-  }
-  if (raw.includes("overloaded")) {
-    return "Anthropic 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.";
-  }
-  return raw;
-}
-
-const PROVIDER_MODELS: Record<Provider, string> = {
-  local: "claude-code",
-  anthropic: "claude-sonnet-4-20250514",
-  openai: "gpt-4o",
-  gemini: "gemini-2.0-flash",
-};
-
-const PROVIDER_ENV_KEYS: Record<Provider, string> = {
-  local: "",
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GEMINI_API_KEY",
-};
-
-function getApiKey(provider: Provider, req?: express.Request): string {
-  if (provider === "local") return "";
-  const headerKey = req?.headers["x-api-key"] as string;
-  const envKey = process.env[PROVIDER_ENV_KEYS[provider]];
-  const key = headerKey || envKey;
-  if (!key) throw new Error(`${PROVIDER_ENV_KEYS[provider]} not set`);
-  return key;
-}
-
+// ── System Prompt Builders ────────────────────────────────────────
 function buildSystemPrompt(persona: PersonaInfo, lang: string, mode: string = "deep"): string {
   const langInstruction = lang === "ko"
     ? "IMPORTANT: You MUST respond in Korean (한국어). Always use Korean regardless of the user's language."
@@ -482,214 +169,7 @@ ${langInstruction}
 ${context}`;
 }
 
-async function streamAnthropic(
-  apiKey: string, systemPrompt: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  res: express.Response
-): Promise<void> {
-  const client = new Anthropic({ apiKey });
-  const stream = await client.messages.stream({
-    model: PROVIDER_MODELS.anthropic,
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages,
-  });
-  for await (const event of stream) {
-    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-      res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
-    } else if (event.type === "message_delta" && (event as any).usage) {
-      const u = (event as any).usage;
-      res.write(`data: ${JSON.stringify({ usage: { output_tokens: u.output_tokens } })}\n\n`);
-    }
-  }
-  const finalMsg = await stream.finalMessage();
-  if (finalMsg.usage) {
-    res.write(`data: ${JSON.stringify({ usage: { input_tokens: finalMsg.usage.input_tokens, output_tokens: finalMsg.usage.output_tokens } })}\n\n`);
-  }
-}
-
-async function streamOpenAI(
-  apiKey: string, systemPrompt: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  res: express.Response
-): Promise<void> {
-  const client = new OpenAI({ apiKey });
-  const stream = await client.chat.completions.create({
-    model: PROVIDER_MODELS.openai,
-    max_tokens: 4096,
-    stream: true,
-    stream_options: { include_usage: true },
-    messages: [
-      { role: "system", content: systemPrompt },
-      ...messages,
-    ],
-  });
-  for await (const chunk of stream) {
-    const text = chunk.choices[0]?.delta?.content;
-    if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
-    if ((chunk as any).usage) {
-      const u = (chunk as any).usage;
-      res.write(`data: ${JSON.stringify({ usage: { input_tokens: u.prompt_tokens, output_tokens: u.completion_tokens } })}\n\n`);
-    }
-  }
-}
-
-async function streamGemini(
-  apiKey: string, systemPrompt: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  res: express.Response
-): Promise<void> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: PROVIDER_MODELS.gemini,
-    systemInstruction: systemPrompt,
-  });
-  const history = messages.slice(0, -1).map(m => ({
-    role: m.role === "user" ? "user" as const : "model" as const,
-    parts: [{ text: m.content }],
-  }));
-  const lastMsg = messages[messages.length - 1]?.content || "";
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessageStream(lastMsg);
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
-    if ((chunk as any).usageMetadata) {
-      const u = (chunk as any).usageMetadata;
-      res.write(`data: ${JSON.stringify({ usage: { input_tokens: u.promptTokenCount, output_tokens: u.candidatesTokenCount } })}\n\n`);
-    }
-  }
-}
-
-async function streamLocal(
-  systemPrompt: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  res: express.Response
-): Promise<void> {
-  const historyParts = messages.slice(0, -1).map(m =>
-    `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
-  );
-  const lastMsg = messages[messages.length - 1]?.content || "";
-  const userPrompt = historyParts.length > 0
-    ? [...historyParts, `User: ${lastMsg}`].join("\n\n")
-    : lastMsg;
-
-  console.error(`[claude-local] system: ${systemPrompt.length} chars, user: ${userPrompt.length} chars`);
-  res.write(`data: ${JSON.stringify({ status: "Initializing Claude Code..." })}\n\n`);
-
-  return new Promise((resolve, reject) => {
-    const cleanEnv = { ...process.env };
-    for (const key of Object.keys(cleanEnv)) {
-      if (key.toUpperCase().includes("CLAUDE")) delete cleanEnv[key];
-    }
-
-    const proc = spawn(claudeCliPath!, [
-      "-p", userPrompt,
-      "--system-prompt", systemPrompt,
-      "--output-format", "json",
-      "--max-turns", "3",
-    ], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: cleanEnv,
-    });
-    console.error(`[claude-local] PID: ${proc.pid || "FAILED"}`);
-
-    let stdout = "";
-
-    // Progress status updates while waiting for response
-    const statusMessages = [
-      { delay: 2000, msg: "Analyzing your question..." },
-      { delay: 5000, msg: "Deep thinking..." },
-      { delay: 10000, msg: "Generating response..." },
-      { delay: 18000, msg: "Almost there..." },
-    ];
-    const statusTimers: NodeJS.Timeout[] = [];
-    for (const s of statusMessages) {
-      statusTimers.push(setTimeout(() => {
-        res.write(`data: ${JSON.stringify({ status: s.msg })}\n\n`);
-      }, s.delay));
-    }
-
-    proc.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-
-    proc.stderr.on("data", (chunk: Buffer) => {
-      const msg = chunk.toString().trim();
-      if (msg) console.error(`[claude-local] ${msg}`);
-    });
-
-    proc.on("close", (code) => {
-      console.error(`[claude-local] Process exited with code: ${code}`);
-      for (const t of statusTimers) clearTimeout(t);
-      res.write(`data: ${JSON.stringify({ status: "" })}\n\n`);
-      try {
-        const parsed = JSON.parse(stdout);
-        const text = parsed.result || parsed.content || stdout;
-        res.write(`data: ${JSON.stringify({ text })}\n\n`);
-        if (parsed.usage) {
-          res.write(`data: ${JSON.stringify({ usage: parsed.usage })}\n\n`);
-        }
-      } catch {
-        // JSON parse failed — send raw stdout as text
-        if (stdout.trim()) res.write(`data: ${JSON.stringify({ text: stdout })}\n\n`);
-      }
-      resolve();
-    });
-
-    proc.on("error", (err) => {
-      console.error(`[claude-local] Spawn error: ${err.message}`);
-      reject(err);
-    });
-  });
-}
-
-// ── Response Cache (server-side) ─────────────────────────────────
-interface CachedResponse {
-  id: string;
-  text: string;
-  usage: { input_tokens?: number; output_tokens?: number } | null;
-  done: boolean;
-  error?: string;
-  listeners: Set<express.Response>;
-  createdAt: number;
-}
-const responseCache = new Map<string, CachedResponse>();
-let responseIdCounter = 0;
-
-// Clean up old cached responses (older than 10 min)
-setInterval(() => {
-  const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const [id, cached] of responseCache) {
-    if (cached.done && cached.createdAt < cutoff) responseCache.delete(id);
-  }
-}, 60_000);
-
-function createCachedWriter(cached: CachedResponse): express.Response {
-  // Proxy that writes to all connected listeners AND caches
-  return {
-    write(chunk: string) {
-      // Parse and accumulate text
-      if (typeof chunk === "string" && chunk.startsWith("data: ")) {
-        const data = chunk.slice(6).trim();
-        if (data !== "[DONE]") {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.text) cached.text += parsed.text;
-            if (parsed.usage) cached.usage = { ...cached.usage, ...parsed.usage };
-            if (parsed.error) cached.error = parsed.error;
-          } catch {}
-        }
-      }
-      // Forward to all connected listeners
-      for (const listener of cached.listeners) {
-        try { listener.write(chunk); } catch { cached.listeners.delete(listener); }
-      }
-      return true;
-    },
-  } as any;
-}
-
+// ── streamChat ────────────────────────────────────────────────────
 async function streamChat(
   req: express.Request,
   res: express.Response,
@@ -701,8 +181,7 @@ async function streamChat(
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  // Create cached response
-  const responseId = `r_${++responseIdCounter}_${Date.now()}`;
+  const responseId = `r_${incrementResponseIdCounter()}_${Date.now()}`;
   const cached: CachedResponse = {
     id: responseId,
     text: "",
@@ -713,10 +192,7 @@ async function streamChat(
   };
   responseCache.set(responseId, cached);
 
-  // Send response ID to client first
   res.write(`data: ${JSON.stringify({ responseId })}\n\n`);
-
-  // Remove listener on disconnect (but don't stop processing)
   req.on("close", () => { cached.listeners.delete(res); });
 
   const writer = createCachedWriter(cached);
@@ -724,7 +200,7 @@ async function streamChat(
   try {
     if (provider === "local") {
       if (!claudeCliAvailable) throw new Error("Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code");
-      await streamLocal(systemPrompt, messages, writer);
+      await streamLocal(claudeCliPath!, systemPrompt, messages, writer);
     } else {
       const apiKey = getApiKey(provider, req);
       if (provider === "openai") await streamOpenAI(apiKey, systemPrompt, messages, writer);
@@ -748,15 +224,12 @@ async function streamChat(
 }
 
 // ── Response Resume API ──────────────────────────────────────────
-
-// Check if a response is still active or get its cached result
 app.get("/api/response/:id", (req, res) => {
   const cached = responseCache.get(req.params.id);
   if (!cached) { res.json({ found: false }); return; }
   res.json({ found: true, text: cached.text, usage: cached.usage, done: cached.done, error: cached.error });
 });
 
-// Resume streaming a response (SSE)
 app.get("/api/response/:id/stream", (req, res) => {
   const cached = responseCache.get(req.params.id);
   if (!cached) {
@@ -768,7 +241,6 @@ app.get("/api/response/:id/stream", (req, res) => {
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  // Send cached text so far
   if (cached.text) res.write(`data: ${JSON.stringify({ text: cached.text, cached: true })}\n\n`);
   if (cached.usage) res.write(`data: ${JSON.stringify({ usage: cached.usage })}\n\n`);
 
@@ -779,30 +251,25 @@ app.get("/api/response/:id/stream", (req, res) => {
     return;
   }
 
-  // Not done yet — subscribe for new chunks
   cached.listeners.add(res);
   req.on("close", () => { cached.listeners.delete(res); });
 });
 
 // ── API Routes ───────────────────────────────────────────────────
-
 app.get("/api/project", (_req, res) => {
   res.json({ name: path.basename(PROJECT_DIR), path: PROJECT_DIR });
 });
 
-// Full project context (what the AI knows)
 app.get("/api/project/context", (_req, res) => {
   res.json({ context: projectContext });
 });
 
-// Refresh project context (re-scan project files)
 app.post("/api/project/context/refresh", (_req, res) => {
   projectContext = scanProject(PROJECT_DIR);
   projectContextLight = scanProjectLight(PROJECT_DIR);
   res.json({ ok: true, size: projectContext.length });
 });
 
-// Translate project context to Korean
 app.post("/api/project/context/translate", async (req, res) => {
   const { provider = "anthropic" } = req.body as { provider?: Provider };
   const systemPrompt = "You are a translator. Translate the following project context document from English to Korean. Keep code blocks, file paths, and technical terms as-is. Translate headings, descriptions, and explanatory text to natural Korean.";
@@ -852,7 +319,6 @@ app.get("/api/personas", (_req, res) => {
   res.json(list);
 });
 
-// Update persona meta (name, title, etc.)
 app.put("/api/persona/:id/meta", (req, res) => {
   const { id } = req.params;
   const updates = req.body as Partial<PersonaMeta>;
@@ -862,16 +328,14 @@ app.put("/api/persona/:id/meta", (req, res) => {
     return;
   }
 
-  // Update in-memory
   const persona = personas.get(id)!;
   if (updates.name !== undefined) persona.name = updates.name;
   if (updates.nameKo !== undefined) persona.nameKo = updates.nameKo;
   if (updates.title !== undefined) persona.title = updates.title;
   if (updates.titleKo !== undefined) persona.titleKo = updates.titleKo;
 
-  // Persist to overrides file
   metaOverrides[id] = { ...metaOverrides[id], ...updates };
-  saveMetaOverrides(metaOverrides);
+  saveMetaOverrides(META_OVERRIDES_PATH, metaOverrides);
 
   res.json({ ok: true, persona: { id, name: persona.name, nameKo: persona.nameKo, title: persona.title, titleKo: persona.titleKo } });
 });
@@ -884,7 +348,6 @@ app.post("/api/read-file", (req, res) => {
   res.json({ content: fs.readFileSync(resolved, "utf-8").slice(0, 50000) });
 });
 
-// Available providers
 app.get("/api/providers", (_req, res) => {
   res.json([
     { id: "local", name: "Claude Code", model: "claude-code", envKey: "", available: claudeCliAvailable },
@@ -894,7 +357,6 @@ app.get("/api/providers", (_req, res) => {
   ]);
 });
 
-// Single persona chat
 app.post("/api/chat", async (req, res) => {
   const { personaId, messages, lang = "en", provider = "anthropic", mode = "deep" } = req.body as {
     personaId: string;
@@ -910,7 +372,6 @@ app.post("/api/chat", async (req, res) => {
   await streamChat(req, res, buildSystemPrompt(persona, lang, mode), messages, provider);
 });
 
-// Group chat (dev personas)
 app.post("/api/chat/group", async (req, res) => {
   const { messages, lang = "en", provider = "anthropic", mode = "deep" } = req.body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -922,7 +383,6 @@ app.post("/api/chat/group", async (req, res) => {
   await streamChat(req, res, buildGroupSystemPrompt(lang, "dev", undefined, mode), messages, provider);
 });
 
-// Biz group chat (active biz personas)
 app.post("/api/chat/biz-group", async (req, res) => {
   const { messages, lang = "en", provider = "anthropic", activeIds = [], mode = "deep" } = req.body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;

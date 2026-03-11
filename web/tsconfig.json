@@ -11,6 +11,6 @@
     "sourceMap": true,
     "skipLibCheck": true
   },
-  "include": ["server.ts", "cli.ts"],
+  "include": ["server.ts", "cli.ts", "types.ts", "providers.ts", "response-cache.ts", "personas.ts", "project-scanner.ts"],
   "exclude": ["public", "dist", "node_modules"]
 }
