@@ -254,9 +254,47 @@
     }
     .token-usage {
       font-size: 11px;
-      color: #999;
-      margin-top: 4px;
+      color: #888;
+      margin-top: 6px;
       padding-left: 44px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: fadeInUsage 0.3s ease;
+    }
+    .token-usage.streaming {
+      color: #aaa;
+    }
+    .token-usage .usage-bar-wrap {
+      flex: 1;
+      max-width: 180px;
+      height: 4px;
+      background: #e8e8e8;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .token-usage .usage-bar {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #7c7c7c, #555);
+      transition: width 0.4s ease;
+      min-width: 2px;
+    }
+    .token-usage.streaming .usage-bar {
+      background: linear-gradient(90deg, #aaa, #888);
+      animation: barPulse 1.5s ease-in-out infinite;
+    }
+    .token-usage .usage-text {
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    @keyframes fadeInUsage {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes barPulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
     }
 
     /* ── Input ─────────────────────────── */
@@ -612,6 +650,16 @@
 let personas = [];
 let activeChat = null; // personaId or 'group' or 'biz-group'
 let chatHistories = JSON.parse(localStorage.getItem('savant-chat-histories') || '{}');
+// Clean up empty/error assistant messages from interrupted sessions
+for (const [key, msgs] of Object.entries(chatHistories)) {
+  chatHistories[key] = msgs.filter(m => {
+    if (m.role !== 'assistant') return true;
+    if (!m.content) return false;
+    if (/\*\*Error\*\*:\s*(network|abort|fetch|failed to fetch)/i.test(m.content)) return false;
+    return true;
+  });
+}
+localStorage.setItem('savant-chat-histories', JSON.stringify(chatHistories));
 let isStreaming = false;
 let chatMode = localStorage.getItem('savant-chat-mode') || 'fast'; // 'fast' or 'deep'
 
@@ -1045,24 +1093,66 @@ function renderMessages() {
     </div>
   `;
 
-  container.innerHTML = welcomePrefix + history.map(msg => {
+  const avStyle2 = activeChat === 'biz-group'
+    ? 'class="avatar sm biz-group-av"'
+    : activeChat === 'group'
+    ? 'class="avatar sm group-av"'
+    : `class="avatar sm" style="background:${p?.color||'#666'}"`;
+  const avText2 = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
+
+  container.innerHTML = welcomePrefix + history.map((msg, idx) => {
     if (msg.role === 'user') {
       return `<div class="message-row user">
         <div class="avatar sm" style="background:#1a1a1a;font-size:9px;">You</div>
         <div class="bubble">${escapeHtml(msg.content)}</div>
       </div>`;
     }
-    const avStyle2 = activeChat === 'biz-group'
-      ? 'class="avatar sm biz-group-av"'
-      : activeChat === 'group'
-      ? 'class="avatar sm group-av"'
-      : `class="avatar sm" style="background:${p?.color||'#666'}"`;
-    const avText2 = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
+    // For in-progress responses, render with streaming-bubble id
+    const isLastMsg = idx === history.length - 1;
+    const isInProgress = isLastMsg && processingChat === activeChat && msg.role === 'assistant';
+    if (!msg.content && !isInProgress) return '';
+    if (isInProgress) {
+      return `<div class="message-row assistant">
+        <div ${avStyle2}>${avText2}</div>
+        <div class="bubble" id="streaming-bubble">${msg.content ? marked.parse(msg.content, { breaks: true }) : ''}</div>
+      </div>`;
+    }
     return `<div class="message-row assistant">
       <div ${avStyle2}>${avText2}</div>
       <div class="bubble">${marked.parse(msg.content, { breaks: true })}</div>
     </div>`;
   }).join('');
+
+  // Show typing indicator if this chat is being processed and no text yet
+  if (processingChat === activeChat) {
+    const lastMsg = history[history.length - 1];
+    const hasContent = lastMsg && lastMsg.role === 'assistant' && lastMsg.content;
+    if (!hasContent) {
+      // No text yet — show typing animation
+      const typingRow = document.createElement('div');
+      typingRow.className = 'message-row assistant';
+      typingRow.innerHTML = `<div ${avStyle2}>${avText2}</div>
+        <div class="bubble">
+          <div class="typing-indicator"><span></span><span></span><span></span></div>
+          <div class="thinking-status"></div>
+        </div>`;
+      container.appendChild(typingRow);
+    }
+    // If has content, streaming-bubble is already rendered from history map above
+  }
+
+  // Show queue indicator if this chat has queued messages
+  const queuedForThis = messageQueue.filter(q => q.chatId === activeChat);
+  if (queuedForThis.length > 0 && processingChat !== activeChat) {
+    const queueRow = document.createElement('div');
+    queueRow.className = 'message-row assistant';
+    queueRow.innerHTML = `<div ${avStyle2}>${avText2}</div>
+      <div class="bubble">
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+        <div style="color:#888;font-size:12px;margin-top:4px">${lang === 'ko' ? '다른 답변 처리 중... 대기열에 추가됨' : 'Waiting for other response to finish...'}</div>
+      </div>`;
+    container.appendChild(queueRow);
+  }
 
   container.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
   scrollToBottom();
@@ -1163,9 +1253,12 @@ function scrollToBottom() {
   requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
 }
 
-// ── Send ─────────────────────────────
+// ── Send (Queue-based) ───────────────
+const messageQueue = [];
+let processingChat = null; // which chat is currently being processed
+
 async function sendMessage() {
-  if (isStreaming || !activeChat) return;
+  if (!activeChat) return;
   const input = document.getElementById('input');
   const text = input.value.trim();
   if (!text) return;
@@ -1173,51 +1266,82 @@ async function sendMessage() {
   input.value = '';
   autoResize(input);
 
-  const history = chatHistories[activeChat];
+  const targetChat = activeChat;
+  const history = chatHistories[targetChat];
   history.push({ role: 'user', content: text });
   saveChatHistories();
   renderMessages();
 
-  // Typing indicator
-  const isGroupChat = activeChat === 'group' || activeChat === 'biz-group';
-  const p = isGroupChat ? null : personas.find(x => x.id === activeChat);
-  const container = document.getElementById('messages');
-  const typingEl = document.createElement('div');
-  typingEl.className = 'message-row assistant';
-  const avStyle = activeChat === 'biz-group'
-    ? 'class="avatar sm biz-group-av"'
-    : activeChat === 'group'
-    ? 'class="avatar sm group-av"'
-    : `class="avatar sm" style="background:${p?.color||'#666'}"`;
-  const avText = activeChat === 'biz-group' ? 'Biz' : activeChat === 'group' ? 'All' : (p?.initial || '?');
-  typingEl.innerHTML = `<div ${avStyle}>${avText}</div>
-    <div class="bubble">
-      <div class="typing-indicator"><span></span><span></span><span></span></div>
-      <div class="thinking-status" id="thinkingStatus"></div>
-    </div>`;
-  container.appendChild(typingEl);
-  scrollToBottom();
-
-  isStreaming = true;
-  document.getElementById('sendBtn').disabled = true;
-  document.getElementById('headerStatus').textContent = t('typing');
-
-  // Show initial status for local provider (server will send real status updates)
-  if (provider === 'local') {
-    const statusEl = document.getElementById('thinkingStatus');
-    if (statusEl) statusEl.textContent = lang === 'ko' ? 'Claude Code 연결 중...' : 'Connecting to Claude Code...';
+  // If already processing another chat, queue this request
+  if (processingChat !== null) {
+    messageQueue.push({ chatId: targetChat, lang, provider, mode: chatMode });
+    // Show queue indicator if viewing this chat
+    if (activeChat === targetChat) {
+      const container = document.getElementById('messages');
+      const queueEl = document.createElement('div');
+      queueEl.className = 'message-row assistant queue-indicator';
+      queueEl.setAttribute('data-queue-chat', targetChat);
+      const qp = personas.find(x => x.id === targetChat);
+      const qAvStyle = `class="avatar sm" style="background:${qp?.color||'#666'}"`;
+      const qAvText = qp?.initial || '?';
+      queueEl.innerHTML = `<div ${qAvStyle}>${qAvText}</div>
+        <div class="bubble" style="color:#888;font-style:italic">${lang === 'ko' ? '다른 답변 처리 중... 대기열에 추가됨' : 'Waiting for other response to finish...'}</div>`;
+      container.appendChild(queueEl);
+      scrollToBottom();
+    }
+    return;
   }
 
-  const isBizGroup = activeChat === 'biz-group';
-  const isDevGroup = activeChat === 'group';
+  processChat(targetChat, lang, provider, chatMode);
+}
+
+async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
+  processingChat = targetChat;
+  const history = chatHistories[targetChat];
+  const isGroupChat = targetChat === 'group' || targetChat === 'biz-group';
+  const p = isGroupChat ? null : personas.find(x => x.id === targetChat);
+
+  // Only show typing indicator if viewing this chat
+  let typingEl = null;
+  if (activeChat === targetChat) {
+    const container = document.getElementById('messages');
+    typingEl = document.createElement('div');
+    typingEl.className = 'message-row assistant';
+    const avStyle = targetChat === 'biz-group'
+      ? 'class="avatar sm biz-group-av"'
+      : targetChat === 'group'
+      ? 'class="avatar sm group-av"'
+      : `class="avatar sm" style="background:${p?.color||'#666'}"`;
+    const avText = targetChat === 'biz-group' ? 'Biz' : targetChat === 'group' ? 'All' : (p?.initial || '?');
+    typingEl.innerHTML = `<div ${avStyle}>${avText}</div>
+      <div class="bubble">
+        <div class="typing-indicator"><span></span><span></span><span></span></div>
+        <div class="thinking-status" id="thinkingStatus"></div>
+      </div>`;
+    container.appendChild(typingEl);
+    scrollToBottom();
+  }
+
+  isStreaming = true;
+  if (activeChat === targetChat) {
+    document.getElementById('headerStatus').textContent = t('typing');
+  }
+
+  if (chatProvider === 'local' && activeChat === targetChat) {
+    const statusEl = document.getElementById('thinkingStatus');
+    if (statusEl) statusEl.textContent = chatLang === 'ko' ? 'Claude Code 연결 중...' : 'Connecting to Claude Code...';
+  }
+
+  const isBizGroup = targetChat === 'biz-group';
+  const isDevGroup = targetChat === 'group';
   const endpoint = isBizGroup ? '/api/chat/biz-group' : isDevGroup ? '/api/chat/group' : '/api/chat';
   let body;
   if (isBizGroup) {
-    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, activeIds: getActiveBizIds(), mode: chatMode };
+    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang: chatLang, provider: chatProvider, activeIds: getActiveBizIds(), mode: chatModeVal };
   } else if (isDevGroup) {
-    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, mode: chatMode };
+    body = { messages: history.map(m => ({ role: m.role, content: m.content })), lang: chatLang, provider: chatProvider, mode: chatModeVal };
   } else {
-    body = { personaId: activeChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang, provider, mode: chatMode };
+    body = { personaId: targetChat, messages: history.map(m => ({ role: m.role, content: m.content })), lang: chatLang, provider: chatProvider, mode: chatModeVal };
   }
 
   try {
@@ -1230,16 +1354,14 @@ async function sendMessage() {
       body: JSON.stringify(body),
     });
 
-    // Check for API key error (skip for local provider)
-    if (response.status === 500 && provider !== 'local') {
+    if (response.status === 500 && chatProvider !== 'local') {
       const errText = await response.text();
       if (errText.includes('API_KEY')) {
-        
-        typingEl.remove();
-        history.pop(); // remove user msg
+        if (typingEl) typingEl.remove();
+        history.pop();
         showApiKeyModal();
         isStreaming = false;
-        document.getElementById('sendBtn').disabled = false;
+        processingChat = null;
         return;
       }
     }
@@ -1251,25 +1373,47 @@ async function sendMessage() {
     let bubbleReady = false;
     let usageData = null;
 
+    const avStyle = targetChat === 'biz-group'
+      ? 'class="avatar sm biz-group-av"'
+      : targetChat === 'group'
+      ? 'class="avatar sm group-av"'
+      : `class="avatar sm" style="background:${p?.color||'#666'}"`;
+    const avText = targetChat === 'biz-group' ? 'Biz' : targetChat === 'group' ? 'All' : (p?.initial || '?');
+
     // For non-local providers, swap typing indicator for streaming bubble immediately
-    if (provider !== 'local') {
-      typingEl.remove();
+    history.push({ role: 'assistant', content: '' });
+    if (chatProvider !== 'local' && activeChat === targetChat) {
+      if (typingEl) typingEl.remove();
       bubbleReady = true;
-      history.push({ role: 'assistant', content: '' });
       const msgRow = document.createElement('div');
       msgRow.className = 'message-row assistant';
       msgRow.innerHTML = `<div ${avStyle}>${avText}</div>
         <div class="bubble" id="streaming-bubble"></div>`;
       container.appendChild(msgRow);
-    } else {
-      history.push({ role: 'assistant', content: '' });
+    }
+
+    function updateStreamingUsage(usage) {
+      const bubble = document.getElementById('streaming-bubble');
+      if (!bubble) return;
+      let el = document.getElementById('streaming-usage');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'streaming-usage';
+        el.className = 'token-usage streaming';
+        bubble.after(el);
+      }
+      const inp = usage.input_tokens || usage.input || 0;
+      const out = usage.output_tokens || usage.output || 0;
+      const maxTokens = 4096;
+      const pct = Math.min(100, Math.round((out / maxTokens) * 100));
+      el.innerHTML = `<span class="usage-text">${inp ? inp.toLocaleString() + ' in · ' : ''}${out.toLocaleString()} out</span>`
+        + `<div class="usage-bar-wrap"><div class="usage-bar" style="width:${pct}%"></div></div>`;
+      scrollToBottom();
     }
 
     function ensureBubble() {
-      if (bubbleReady) return;
-      // First real text arrived — swap typing for streaming bubble
-      
-      typingEl.remove();
+      if (bubbleReady || activeChat !== targetChat) return;
+      if (typingEl) typingEl.remove();
       bubbleReady = true;
       const msgRow = document.createElement('div');
       msgRow.className = 'message-row assistant';
@@ -1306,7 +1450,7 @@ async function sendMessage() {
                   'Deep thinking...': { ko: '깊이 생각하는 중...' },
                   'Almost there...': { ko: '거의 다 됐어요...' },
                 };
-                const translated = lang === 'ko' && statusI18n[parsed.status]?.ko
+                const translated = chatLang === 'ko' && statusI18n[parsed.status]?.ko
                   ? statusI18n[parsed.status].ko : parsed.status;
                 statusEl.style.opacity = '0';
                 setTimeout(() => { statusEl.textContent = translated; statusEl.style.opacity = '1'; }, 200);
@@ -1316,7 +1460,9 @@ async function sendMessage() {
             ensureBubble();
             assistantText += `\n\n**Error**: ${parsed.error}`;
           } else if (parsed.usage) {
-            usageData = parsed.usage;
+            usageData = { ...usageData, ...parsed.usage };
+            // Real-time usage update during streaming
+            updateStreamingUsage(usageData);
           } else if (parsed.text) {
             ensureBubble();
             assistantText += parsed.text;
@@ -1324,23 +1470,33 @@ async function sendMessage() {
         } catch {}
       }
 
+      // Update history in real-time so chat switching preserves progress
+      history[history.length - 1].content = assistantText;
+
       const bubble = document.getElementById('streaming-bubble');
-      if (bubble) {
+      if (bubble && activeChat === targetChat) {
         bubble.innerHTML = marked.parse(assistantText, { breaks: true });
         bubble.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        scrollToBottom();
       }
-      scrollToBottom();
     }
 
-    // Show token usage below the response
-    if (usageData && provider === 'local') {
+    // Show final token usage below the response
+    if (usageData && activeChat === targetChat) {
       const bubble = document.getElementById('streaming-bubble');
       if (bubble) {
-        const usageEl = document.createElement('div');
-        usageEl.className = 'token-usage';
+        // Remove streaming usage if exists
+        const existing = document.getElementById('streaming-usage');
+        if (existing) existing.remove();
         const inp = usageData.input_tokens || usageData.input || 0;
         const out = usageData.output_tokens || usageData.output || 0;
-        usageEl.textContent = `${inp.toLocaleString()} in · ${out.toLocaleString()} out tokens`;
+        const total = inp + out;
+        const maxTokens = 4096;
+        const pct = Math.min(100, Math.round((out / maxTokens) * 100));
+        const usageEl = document.createElement('div');
+        usageEl.className = 'token-usage';
+        usageEl.innerHTML = `<span class="usage-text">${inp.toLocaleString()} in · ${out.toLocaleString()} out</span>`
+          + `<div class="usage-bar-wrap"><div class="usage-bar" style="width:${pct}%"></div></div>`;
         bubble.after(usageEl);
       }
     }
@@ -1348,18 +1504,32 @@ async function sendMessage() {
     history[history.length - 1].content = assistantText;
     saveChatHistories();
   } catch (err) {
-    
-    typingEl?.remove();
-    history.push({ role: 'assistant', content: `**Error**: ${err.message}` });
-    saveChatHistories();
-    renderMessages();
+    if (typingEl) typingEl.remove();
+    // Don't save transient network errors (e.g. page refresh during streaming)
+    const isNetworkError = /network|abort|fetch|failed to fetch/i.test(err.message || '');
+    if (!isNetworkError) {
+      history.push({ role: 'assistant', content: `**Error**: ${err.message}` });
+      saveChatHistories();
+    }
+    if (activeChat === targetChat) renderMessages();
+  } finally {
+    isStreaming = false;
+    processingChat = null;
+    if (activeChat === targetChat) {
+      const sp = personas.find(x => x.id === activeChat);
+      const statusText = activeChat === 'biz-group' ? t('bizGroupTitle') : activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? sp?.titleKo : sp?.title);
+      document.getElementById('headerStatus').textContent = statusText || '';
+    }
+    // If user switched to the completed chat, re-render to show the response
+    if (activeChat === targetChat) renderMessages();
+    // Process next in queue
+    if (messageQueue.length > 0) {
+      const next = messageQueue.shift();
+      // Remove queue indicator
+      document.querySelectorAll(`.queue-indicator[data-queue-chat="${next.chatId}"]`).forEach(el => el.remove());
+      processChat(next.chatId, next.lang, next.provider, next.mode);
+    }
   }
-
-  
-  isStreaming = false;
-  document.getElementById('sendBtn').disabled = false;
-  const statusText = activeChat === 'biz-group' ? t('bizGroupTitle') : activeChat === 'group' ? t('groupTitle') : (lang === 'ko' ? p?.titleKo : p?.title);
-  document.getElementById('headerStatus').textContent = statusText;
 }
 
 // ── API Key ──────────────────────────
@@ -1466,11 +1636,15 @@ function setChatMode(mode) {
 
 function clearCurrentChat() {
   if (!activeChat) return;
+  if (processingChat === activeChat) {
+    alert(lang === 'ko' ? '답변 처리 중에는 삭제할 수 없습니다.' : 'Cannot clear while response is in progress.');
+    return;
+  }
   const msg = lang === 'ko' ? '이 대화 내역을 삭제하시겠습니까?' : 'Clear this chat?';
   if (!confirm(msg)) return;
-  delete chatHistories[activeChat];
+  chatHistories[activeChat] = [];
   saveChatHistories();
-  renderChat(activeChat);
+  renderMessages();
 }
 
 function downloadChat() {
@@ -1493,7 +1667,7 @@ function downloadChat() {
 }
 
 function handleKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage(); }
 }
 
 function autoResize(el) {

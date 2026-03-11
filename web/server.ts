@@ -497,7 +497,14 @@ async function streamAnthropic(
   for await (const event of stream) {
     if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
       res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+    } else if (event.type === "message_delta" && (event as any).usage) {
+      const u = (event as any).usage;
+      res.write(`data: ${JSON.stringify({ usage: { output_tokens: u.output_tokens } })}\n\n`);
     }
+  }
+  const finalMsg = await stream.finalMessage();
+  if (finalMsg.usage) {
+    res.write(`data: ${JSON.stringify({ usage: { input_tokens: finalMsg.usage.input_tokens, output_tokens: finalMsg.usage.output_tokens } })}\n\n`);
   }
 }
 
@@ -511,6 +518,7 @@ async function streamOpenAI(
     model: PROVIDER_MODELS.openai,
     max_tokens: 4096,
     stream: true,
+    stream_options: { include_usage: true },
     messages: [
       { role: "system", content: systemPrompt },
       ...messages,
@@ -519,6 +527,10 @@ async function streamOpenAI(
   for await (const chunk of stream) {
     const text = chunk.choices[0]?.delta?.content;
     if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    if ((chunk as any).usage) {
+      const u = (chunk as any).usage;
+      res.write(`data: ${JSON.stringify({ usage: { input_tokens: u.prompt_tokens, output_tokens: u.completion_tokens } })}\n\n`);
+    }
   }
 }
 
@@ -542,6 +554,10 @@ async function streamGemini(
   for await (const chunk of result.stream) {
     const text = chunk.text();
     if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    if ((chunk as any).usageMetadata) {
+      const u = (chunk as any).usageMetadata;
+      res.write(`data: ${JSON.stringify({ usage: { input_tokens: u.promptTokenCount, output_tokens: u.candidatesTokenCount } })}\n\n`);
+    }
   }
 }
 
