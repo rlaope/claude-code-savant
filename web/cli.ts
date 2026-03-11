@@ -24,7 +24,7 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-const serverPath = path.join(__dirname, "dist", "server.js");
+const serverPath = path.join(__dirname, "server.js");
 const projectDir = process.cwd();
 
 console.log("");

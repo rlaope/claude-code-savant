@@ -789,8 +789,112 @@ async function init() {
   renderPersonaList();
   document.getElementById('modeFast').className = chatMode === 'fast' ? 'active' : '';
   document.getElementById('modeDeep').className = chatMode === 'deep' ? 'active' : '';
-  const firstDev = personas.find(p => p.category === 'dev');
-  if (firstDev) selectChat(firstDev.id);
+  // Restore last active chat or default to first dev persona
+  const lastChat = localStorage.getItem('savant-active-chat');
+  const validChat = lastChat && (lastChat === 'group' || lastChat === 'biz-group' || personas.some(p => p.id === lastChat));
+  if (validChat) {
+    selectChat(lastChat);
+  } else {
+    const firstDev = personas.find(p => p.category === 'dev');
+    if (firstDev) selectChat(firstDev.id);
+  }
+
+  // Resume active response if page was refreshed during streaming
+  resumeActiveResponse();
+}
+
+async function resumeActiveResponse() {
+  const saved = sessionStorage.getItem('savant-active-response');
+  if (!saved) return;
+  try {
+    const { id, chat } = JSON.parse(saved);
+    // Check if response exists on server
+    const check = await fetch(`/api/response/${id}`);
+    const info = await check.json();
+    if (!info.found) { sessionStorage.removeItem('savant-active-response'); return; }
+
+    // Switch to that chat
+    if (activeChat !== chat) selectChat(chat);
+    const history = chatHistories[chat] || [];
+
+    if (info.done) {
+      // Response finished while we were refreshing — just update the last message
+      if (info.text && history.length > 0 && history[history.length - 1].role === 'assistant') {
+        history[history.length - 1].content = info.text;
+      } else if (info.text) {
+        history.push({ role: 'assistant', content: info.text });
+      }
+      saveChatHistories();
+      renderMessages();
+      sessionStorage.removeItem('savant-active-response');
+      return;
+    }
+
+    // Still streaming — reconnect via SSE
+    isStreaming = true;
+    processingChat = chat;
+    // Ensure assistant message exists
+    if (history.length === 0 || history[history.length - 1].role !== 'assistant') {
+      history.push({ role: 'assistant', content: info.text || '' });
+    } else {
+      history[history.length - 1].content = info.text || '';
+    }
+    renderMessages();
+
+    const response = await fetch(`/api/response/${id}/stream`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let assistantText = info.text || '';
+    let buffer = '';
+    let usageData = info.usage || null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.text) {
+            if (parsed.cached) { assistantText = parsed.text; } // Full cached text
+            else { assistantText += parsed.text; }
+            const estTokens = Math.round(assistantText.length / 4);
+            updateStreamingUsage(usageData, estTokens);
+          } else if (parsed.usage) {
+            usageData = { ...usageData, ...parsed.usage };
+            updateStreamingUsage(usageData, null);
+          } else if (parsed.error) {
+            assistantText += `\n\n**Error**: ${parsed.error}`;
+          }
+        } catch {}
+      }
+
+      history[history.length - 1].content = assistantText;
+      const bubble = document.getElementById('streaming-bubble');
+      if (bubble && activeChat === chat) {
+        bubble.innerHTML = marked.parse(assistantText, { breaks: true });
+        bubble.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        scrollToBottom();
+      }
+    }
+
+    history[history.length - 1].content = assistantText;
+    saveChatHistories();
+    sessionStorage.removeItem('savant-active-response');
+    isStreaming = false;
+    processingChat = null;
+    renderMessages();
+  } catch (err) {
+    sessionStorage.removeItem('savant-active-response');
+    isStreaming = false;
+    processingChat = null;
+  }
 }
 
 function setProvider(p) {
@@ -1021,6 +1125,7 @@ function closeDevModal() {
 
 function selectChat(id) {
   activeChat = id;
+  localStorage.setItem('savant-active-chat', id);
   if (!chatHistories[id]) chatHistories[id] = [];
 
   if (id === 'group') {
@@ -1392,7 +1497,7 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
       container.appendChild(msgRow);
     }
 
-    function updateStreamingUsage(usage) {
+    function updateStreamingUsage(usage, estimatedOut) {
       const bubble = document.getElementById('streaming-bubble');
       if (!bubble) return;
       let el = document.getElementById('streaming-usage');
@@ -1402,13 +1507,13 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
         el.className = 'token-usage streaming';
         bubble.after(el);
       }
-      const inp = usage.input_tokens || usage.input || 0;
-      const out = usage.output_tokens || usage.output || 0;
+      const inp = usage?.input_tokens || usage?.input || 0;
+      const out = usage?.output_tokens || usage?.output || estimatedOut || 0;
       const maxTokens = 4096;
       const pct = Math.min(100, Math.round((out / maxTokens) * 100));
-      el.innerHTML = `<span class="usage-text">${inp ? inp.toLocaleString() + ' in · ' : ''}${out.toLocaleString()} out</span>`
+      const label = inp ? `${inp.toLocaleString()} in · ${out.toLocaleString()} out` : `~${out.toLocaleString()} tokens`;
+      el.innerHTML = `<span class="usage-text">${label}</span>`
         + `<div class="usage-bar-wrap"><div class="usage-bar" style="width:${pct}%"></div></div>`;
-      scrollToBottom();
     }
 
     function ensureBubble() {
@@ -1435,7 +1540,12 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
         if (data === '[DONE]') continue;
         try {
           const parsed = JSON.parse(data);
-          if (parsed.status !== undefined) {
+          if (parsed.responseId) {
+            // Server sent response ID for resume capability
+            sessionStorage.setItem('savant-active-response', JSON.stringify({
+              id: parsed.responseId, chat: targetChat
+            }));
+          } else if (parsed.status !== undefined) {
             // Server-sent status update (local provider thinking phase)
             const statusEl = document.getElementById('thinkingStatus');
             if (statusEl) {
@@ -1461,17 +1571,21 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
             assistantText += `\n\n**Error**: ${parsed.error}`;
           } else if (parsed.usage) {
             usageData = { ...usageData, ...parsed.usage };
-            // Real-time usage update during streaming
-            updateStreamingUsage(usageData);
+            updateStreamingUsage(usageData, null);
           } else if (parsed.text) {
             ensureBubble();
             assistantText += parsed.text;
+            // Estimate ~1 token per 4 chars, update progress bar in real-time
+            const estTokens = Math.round(assistantText.length / 4);
+            updateStreamingUsage(usageData, estTokens);
           }
         } catch {}
       }
 
       // Update history in real-time so chat switching preserves progress
       history[history.length - 1].content = assistantText;
+      // Periodically save to localStorage so refresh preserves partial responses
+      if (assistantText.length % 200 < 50) saveChatHistories();
 
       const bubble = document.getElementById('streaming-bubble');
       if (bubble && activeChat === targetChat) {
@@ -1503,6 +1617,7 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
 
     history[history.length - 1].content = assistantText;
     saveChatHistories();
+    sessionStorage.removeItem('savant-active-response');
   } catch (err) {
     if (typingEl) typingEl.remove();
     // Don't save transient network errors (e.g. page refresh during streaming)

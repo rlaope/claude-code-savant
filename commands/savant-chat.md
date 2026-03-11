@@ -20,12 +20,15 @@ You MUST execute these steps in order:
 cd <plugin_dir>/web && npx tsc 2>/dev/null
 ```
 
-3. Start the server with the USER'S CURRENT PROJECT as context (not the plugin directory):
+3. Start the server with the USER'S CURRENT PROJECT as context (not the plugin directory) and auto-open browser:
 ```bash
 cd <plugin_dir>/web && PROJECT_DIR=<user_cwd> node dist/server.js &
 ```
 
-4. Tell the user to open http://localhost:3456 (or the next available port)
+4. Wait 2 seconds for the server to start, then auto-open the browser:
+```bash
+sleep 2 && open http://localhost:3456
+```
 
 5. If the build fails because dependencies aren't installed, run:
 ```bash

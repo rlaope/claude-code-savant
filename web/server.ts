@@ -644,6 +644,52 @@ async function streamLocal(
   });
 }
 
+// ── Response Cache (server-side) ─────────────────────────────────
+interface CachedResponse {
+  id: string;
+  text: string;
+  usage: { input_tokens?: number; output_tokens?: number } | null;
+  done: boolean;
+  error?: string;
+  listeners: Set<express.Response>;
+  createdAt: number;
+}
+const responseCache = new Map<string, CachedResponse>();
+let responseIdCounter = 0;
+
+// Clean up old cached responses (older than 10 min)
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [id, cached] of responseCache) {
+    if (cached.done && cached.createdAt < cutoff) responseCache.delete(id);
+  }
+}, 60_000);
+
+function createCachedWriter(cached: CachedResponse): express.Response {
+  // Proxy that writes to all connected listeners AND caches
+  return {
+    write(chunk: string) {
+      // Parse and accumulate text
+      if (typeof chunk === "string" && chunk.startsWith("data: ")) {
+        const data = chunk.slice(6).trim();
+        if (data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.text) cached.text += parsed.text;
+            if (parsed.usage) cached.usage = { ...cached.usage, ...parsed.usage };
+            if (parsed.error) cached.error = parsed.error;
+          } catch {}
+        }
+      }
+      // Forward to all connected listeners
+      for (const listener of cached.listeners) {
+        try { listener.write(chunk); } catch { cached.listeners.delete(listener); }
+      }
+      return true;
+    },
+  } as any;
+}
+
 async function streamChat(
   req: express.Request,
   res: express.Response,
@@ -655,26 +701,88 @@ async function streamChat(
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
+  // Create cached response
+  const responseId = `r_${++responseIdCounter}_${Date.now()}`;
+  const cached: CachedResponse = {
+    id: responseId,
+    text: "",
+    usage: null,
+    done: false,
+    listeners: new Set([res]),
+    createdAt: Date.now(),
+  };
+  responseCache.set(responseId, cached);
+
+  // Send response ID to client first
+  res.write(`data: ${JSON.stringify({ responseId })}\n\n`);
+
+  // Remove listener on disconnect (but don't stop processing)
+  req.on("close", () => { cached.listeners.delete(res); });
+
+  const writer = createCachedWriter(cached);
+
   try {
     if (provider === "local") {
       if (!claudeCliAvailable) throw new Error("Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code");
-      await streamLocal(systemPrompt, messages, res);
+      await streamLocal(systemPrompt, messages, writer);
     } else {
       const apiKey = getApiKey(provider, req);
-      if (provider === "openai") await streamOpenAI(apiKey, systemPrompt, messages, res);
-      else if (provider === "gemini") await streamGemini(apiKey, systemPrompt, messages, res);
-      else await streamAnthropic(apiKey, systemPrompt, messages, res);
+      if (provider === "openai") await streamOpenAI(apiKey, systemPrompt, messages, writer);
+      else if (provider === "gemini") await streamGemini(apiKey, systemPrompt, messages, writer);
+      else await streamAnthropic(apiKey, systemPrompt, messages, writer);
     }
 
-    res.write("data: [DONE]\n\n");
-    res.end();
+    cached.done = true;
+    for (const listener of cached.listeners) {
+      try { listener.write("data: [DONE]\n\n"); listener.end(); } catch {}
+    }
   } catch (err: unknown) {
     const raw = err instanceof Error ? err.message : "Unknown error";
     const message = formatApiError(raw);
-    res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
-    res.end();
+    cached.error = message;
+    cached.done = true;
+    for (const listener of cached.listeners) {
+      try { listener.write(`data: ${JSON.stringify({ error: message })}\n\n`); listener.end(); } catch {}
+    }
   }
 }
+
+// ── Response Resume API ──────────────────────────────────────────
+
+// Check if a response is still active or get its cached result
+app.get("/api/response/:id", (req, res) => {
+  const cached = responseCache.get(req.params.id);
+  if (!cached) { res.json({ found: false }); return; }
+  res.json({ found: true, text: cached.text, usage: cached.usage, done: cached.done, error: cached.error });
+});
+
+// Resume streaming a response (SSE)
+app.get("/api/response/:id/stream", (req, res) => {
+  const cached = responseCache.get(req.params.id);
+  if (!cached) {
+    res.status(404).json({ error: "Response not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  // Send cached text so far
+  if (cached.text) res.write(`data: ${JSON.stringify({ text: cached.text, cached: true })}\n\n`);
+  if (cached.usage) res.write(`data: ${JSON.stringify({ usage: cached.usage })}\n\n`);
+
+  if (cached.done) {
+    if (cached.error) res.write(`data: ${JSON.stringify({ error: cached.error })}\n\n`);
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return;
+  }
+
+  // Not done yet — subscribe for new chunks
+  cached.listeners.add(res);
+  req.on("close", () => { cached.listeners.delete(res); });
+});
 
 // ── API Routes ───────────────────────────────────────────────────
 
