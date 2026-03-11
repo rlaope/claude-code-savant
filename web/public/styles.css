@@ -297,7 +297,7 @@ body {
   font-variant-numeric: tabular-nums;
   transition: opacity 0.3s ease;
 }
-.input-usage-bar.hidden { display: none; }
+.input-usage-bar:empty { display: none; }
 .input-usage-bar.streaming { color: #666; }
 .input-usage-bar .iub-bar-wrap {
   flex: 1;
@@ -326,6 +326,21 @@ body {
   transition: border-color 0.15s;
 }
 .input-wrapper:focus-within { border-color: #ddd; background: #fff; }
+.input-token-inline {
+  position: absolute;
+  top: -18px;
+  right: 8px;
+  font-size: 10px;
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transition: color 0.3s;
+}
+.input-token-inline.streaming { color: #666; }
+.input-token-inline:empty { display: none; }
+.input-wrapper {
+  position: relative;
+}
 .input-wrapper textarea {
   flex: 1; border: none; background: none;
   font-family: inherit; font-size: 13.5px; line-height: 1.5;

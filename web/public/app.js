@@ -18,6 +18,29 @@ localStorage.setItem('savant-chat-histories', JSON.stringify(chatHistories));
 let isStreaming = false;
 let chatMode = localStorage.getItem('savant-chat-mode') || 'fast'; // 'fast' or 'deep'
 
+// Session token usage tracking (persisted in sessionStorage)
+let sessionTokens = JSON.parse(sessionStorage.getItem('savant-session-tokens') || '{"input":0,"output":0}');
+function addSessionTokens(inp, out) {
+  sessionTokens.input += inp;
+  sessionTokens.output += out;
+  sessionStorage.setItem('savant-session-tokens', JSON.stringify(sessionTokens));
+  renderTokenBar();
+}
+function renderTokenBar() {
+  const total = sessionTokens.input + sessionTokens.output;
+  const iub = document.getElementById('inputUsageBar');
+  if (iub) {
+    iub.innerHTML = `<span>${sessionTokens.input.toLocaleString()} in · ${sessionTokens.output.toLocaleString()} out · ${total.toLocaleString()} total</span>`;
+  }
+  const inl = document.getElementById('inputTokenInline');
+  if (inl) {
+    const maxDaily = 200000; // rough reference
+    const pct = Math.min(100, Math.round((total / maxDaily) * 100));
+    inl.className = 'input-token-inline';
+    inl.innerHTML = `${total.toLocaleString()} tok <span style="display:inline-block;width:40px;height:3px;background:#e0e0e0;border-radius:2px;vertical-align:middle;overflow:hidden;"><span style="display:block;height:100%;width:${pct}%;background:#555;border-radius:2px;"></span></span>`;
+  }
+}
+
 function saveChatHistories() {
   try {
     // Keep only last 50 messages per chat to avoid localStorage limits
@@ -142,6 +165,7 @@ async function init() {
   applyLang();
   applyProviderButtons();
   renderPersonaList();
+  renderTokenBar();
   document.getElementById('modeFast').className = chatMode === 'fast' ? 'active' : '';
   document.getElementById('modeDeep').className = chatMode === 'deep' ? 'active' : '';
   // Restore last active chat or default to first dev persona
@@ -867,15 +891,21 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
     function updateStreamingUsage(usage, estimatedOut) {
       const inp = usage?.input_tokens || usage?.input || 0;
       const out = usage?.output_tokens || usage?.output || estimatedOut || 0;
-      const maxTokens = 4096;
-      const pct = Math.min(100, Math.round((out / maxTokens) * 100));
-      const label = inp ? `${inp.toLocaleString()} in · ${out.toLocaleString()} out` : `~${out.toLocaleString()} tokens`;
+      const curLabel = inp ? `${inp.toLocaleString()} in · ${out.toLocaleString()} out` : `~${out.toLocaleString()} tok`;
+      const totalNow = sessionTokens.input + sessionTokens.output + inp + out;
 
-      // Update input area usage bar (always visible)
+      // Update inline token in input box
+      const inl = document.getElementById('inputTokenInline');
+      if (inl) {
+        const maxDaily = 200000;
+        const pct = Math.min(100, Math.round((totalNow / maxDaily) * 100));
+        inl.className = 'input-token-inline streaming';
+        inl.innerHTML = `${totalNow.toLocaleString()} tok <span style="display:inline-block;width:40px;height:3px;background:#e0e0e0;border-radius:2px;vertical-align:middle;overflow:hidden;"><span style="display:block;height:100%;width:${pct}%;background:#888;border-radius:2px;animation:barPulse 1.5s ease-in-out infinite;"></span></span>`;
+      }
+      // Update footer bar with current request detail
       const iub = document.getElementById('inputUsageBar');
       if (iub) {
-        iub.className = 'input-usage-bar streaming';
-        iub.innerHTML = `<span>${label}</span><div class="iub-bar-wrap"><div class="iub-bar" style="width:${pct}%"></div></div>`;
+        iub.innerHTML = `<span>This response: ${curLabel} · Session: ${totalNow.toLocaleString()} total</span>`;
       }
     }
 
@@ -968,16 +998,11 @@ async function processChat(targetChat, chatLang, chatProvider, chatModeVal) {
       renderBubbleContent();
     }
 
-    // Show final token usage in input area bar
-    const iub = document.getElementById('inputUsageBar');
-    if (iub) {
+    // Accumulate session tokens
+    {
       const inp = usageData?.input_tokens || usageData?.input || 0;
       const out = usageData?.output_tokens || usageData?.output || Math.round(assistantText.length / 4);
-      const maxTokens = 4096;
-      const pct = Math.min(100, Math.round((out / maxTokens) * 100));
-      const label = inp ? `${inp.toLocaleString()} in · ${out.toLocaleString()} out` : `~${out.toLocaleString()} tokens`;
-      iub.className = 'input-usage-bar';
-      iub.innerHTML = `<span>${label}</span><div class="iub-bar-wrap"><div class="iub-bar" style="width:${pct}%"></div></div>`;
+      addSessionTokens(inp, out);
     }
 
     history[history.length - 1].content = assistantText;
