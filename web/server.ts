@@ -180,6 +180,8 @@ async function streamChat(
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
 
   const responseId = `r_${incrementResponseIdCounter()}_${Date.now()}`;
   const cached: CachedResponse = {
@@ -193,7 +195,7 @@ async function streamChat(
   responseCache.set(responseId, cached);
 
   res.write(`data: ${JSON.stringify({ responseId })}\n\n`);
-  req.on("close", () => { cached.listeners.delete(res); });
+  // Don't eagerly remove listeners on close — let the writer's try/catch handle disconnected clients
 
   const writer = createCachedWriter(cached);
 
@@ -240,6 +242,8 @@ app.get("/api/response/:id/stream", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
 
   if (cached.text) res.write(`data: ${JSON.stringify({ text: cached.text, cached: true })}\n\n`);
   if (cached.usage) res.write(`data: ${JSON.stringify({ usage: cached.usage })}\n\n`);
@@ -252,7 +256,7 @@ app.get("/api/response/:id/stream", (req, res) => {
   }
 
   cached.listeners.add(res);
-  req.on("close", () => { cached.listeners.delete(res); });
+  // Writer's try/catch handles disconnected clients
 });
 
 // ── API Routes ───────────────────────────────────────────────────

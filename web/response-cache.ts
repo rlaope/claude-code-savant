@@ -40,7 +40,10 @@ export function createCachedWriter(cached: CachedResponse): express.Response {
         }
       }
       for (const listener of cached.listeners) {
-        try { listener.write(chunk); } catch { cached.listeners.delete(listener); }
+        try {
+          listener.write(chunk);
+          if (typeof (listener as any).flush === "function") (listener as any).flush();
+        } catch { cached.listeners.delete(listener); }
       }
       return true;
     },

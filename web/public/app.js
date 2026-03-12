@@ -18,14 +18,21 @@ localStorage.setItem('savant-chat-histories', JSON.stringify(chatHistories));
 let isStreaming = false;
 let chatMode = localStorage.getItem('savant-chat-mode') || 'fast'; // 'fast' or 'deep'
 
-// Session token usage tracking (persisted in sessionStorage)
-let sessionTokens = JSON.parse(sessionStorage.getItem('savant-session-tokens') || '{"input":0,"output":0}');
+// Session token usage tracking (persisted in localStorage so it survives tab close)
+let sessionTokens = JSON.parse(localStorage.getItem('savant-session-tokens') || '{"input":0,"output":0}');
 function addSessionTokens(inp, out) {
   sessionTokens.input += inp;
   sessionTokens.output += out;
-  sessionStorage.setItem('savant-session-tokens', JSON.stringify(sessionTokens));
+  localStorage.setItem('savant-session-tokens', JSON.stringify(sessionTokens));
   renderTokenBar();
 }
+// Warn before closing tab during streaming
+window.addEventListener('beforeunload', (e) => {
+  if (isStreaming) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 function renderTokenBar() {
   const total = sessionTokens.input + sessionTokens.output;
   const iub = document.getElementById('inputUsageBar');
